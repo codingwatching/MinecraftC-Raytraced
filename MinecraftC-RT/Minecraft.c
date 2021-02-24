@@ -8,6 +8,7 @@
 #include "Render/Texture/LavaTexture.h"
 #include "Render/Texture/WaterTexture.h"
 #include "Render/ShapeRenderer.h"
+#include "Render/OctreeRenderer.h"
 #include "Level/Generator/LevelGenerator.h"
 #include "Particle/WaterDropParticle.h"
 
@@ -347,6 +348,7 @@ void MinecraftRun(Minecraft minecraft)
 	BlocksInitialize();
 	ShapeRendererInitialize();
 	SessionDataInitialize();
+	OctreeRendererInitialize(minecraft->FrameWidth, minecraft->FrameHeight);
 	minecraft->WorkingDirectory = SDL_GetPrefPath("NotMojang", "MinecraftC");
 	minecraft->Settings = GameSettingsCreate(minecraft);
 	SDL_GL_SetSwapInterval(minecraft->Settings->LimitFramerate ? 1 : 0);
@@ -963,8 +965,6 @@ void MinecraftSetLevel(Minecraft minecraft, Level level)
 	
 	if (minecraft->LevelRenderer != NULL)
 	{
-		LevelRendererDestroy(minecraft->LevelRenderer);
-		minecraft->LevelRenderer = LevelRendererCreate(minecraft, minecraft->TextureManager);
 		minecraft->LevelRenderer->Level = level;
 		if (level != NULL)
 		{
@@ -982,6 +982,8 @@ void MinecraftSetLevel(Minecraft minecraft, Level level)
 			minecraft->ParticleManager->Particles[i] = ListClear(minecraft->ParticleManager->Particles[i]);
 		}
 	}
+	
+	OctreeRendererSetOctree(level->Octree);
 }
 
 void MinecraftDestroy(Minecraft minecraft)
@@ -991,6 +993,7 @@ void MinecraftDestroy(Minecraft minecraft)
 	RendererDestroy(minecraft->Renderer);
 	LevelIODestroy(minecraft->LevelIO);
 	StringDestroy(minecraft->Debug);
+	OctreeRendererDeinitialize();
 	MemoryFree(minecraft);
 }
 

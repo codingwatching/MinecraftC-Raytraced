@@ -9,7 +9,8 @@ Octree OctreeCreate(Level level)
 		.Level = level,
 		.Depth = log2(fmax(level->Width, fmax(level->Height, level->Depth))),
 	};
-	tree->Masks = MemoryAllocate(((int)pow(8, tree->Depth) - 1) / 7);
+	tree->MaskCount = ((int)pow(8, tree->Depth) - 1) / 7;
+	tree->Masks = MemoryAllocate(tree->MaskCount);
 	return tree;
 }
 

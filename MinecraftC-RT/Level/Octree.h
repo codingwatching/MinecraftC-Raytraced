@@ -4,6 +4,7 @@
 typedef struct Octree
 {
 	int Depth;
+	int MaskCount;
 	unsigned char * Masks;
 	struct Level * Level;
 } * Octree;
