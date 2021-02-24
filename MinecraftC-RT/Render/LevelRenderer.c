@@ -28,10 +28,6 @@ void LevelRendererRefresh(LevelRenderer renderer)
 		for (int i = 0; i < renderer->ChunkCacheCount; i++) { ChunkDispose(renderer->ChunkCache[i]); }
 		MemoryFree(renderer->ChunkCache);
 		MemoryFree(renderer->LoadQueue);
-		/*renderer->Chunks = ListClear(renderer->Chunks);
-		for (int i = 0; i < 65536; i++) { renderer->ChunkDataCache[i] = 0; }
-		glDeleteLists(renderer->BaseListID, 4096 << 6 << 1);
-		renderer->BaseListID = glGenLists(4096 << 6 << 1);*/
 	}
 	
 	renderer->ChunkCount = (int3){ renderer->Level->Width, renderer->Level->Depth, renderer->Level->Height } / 16;
