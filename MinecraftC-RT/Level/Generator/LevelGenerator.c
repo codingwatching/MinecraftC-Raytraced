@@ -176,6 +176,7 @@ Level LevelGeneratorGenerate(LevelGenerator generator, const char * userName, in
 			if (NoiseCompute(n3, (float2){ x, y }) / 8.0 > 0.0) { v2 = v1; }
 			float m = fmaxf(v1, v2) / 2.0;
 			if (m < 0.0) { m *= 0.8; }
+			m -= pow(fminf(length2f((float2){ x / (float)w - 0.5, y / (float)d - 0.5 }) * 2.0, 1.0), 10.0) * 10.0;
 			heights[x + y * w] = m;
 		}
 	}
