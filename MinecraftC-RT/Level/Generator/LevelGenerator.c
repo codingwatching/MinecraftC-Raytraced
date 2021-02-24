@@ -405,7 +405,7 @@ Level LevelGeneratorGenerate(LevelGenerator generator, const char * userName, in
 	
 	Level level = LevelCreate();
 	level->WaterLevel = generator->WaterLevel;
-	LevelSetData(level, w, 64, d, generator->Blocks);
+	LevelSetData(level, generator->ProgressBar, w, 64, d, generator->Blocks);
 	level->CreateTime = TimeMilli();
 	level->Creator = userName;
 	level->Name = "A Nice World";

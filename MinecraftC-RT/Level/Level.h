@@ -2,7 +2,9 @@
 #include <stdbool.h>
 #include "Tile/Block.h"
 #include "NextTickListEntry.h"
+#include "Octree.h"
 #include "../MovingObjectPosition.h"
+#include "../ProgressBarDisplay.h"
 #include "../Utilities/List.h"
 #include "../Utilities/Random.h"
 #include "../Particle/ParticleManager.h"
@@ -13,6 +15,7 @@ typedef struct Level
 {
 	int Width, Height, Depth;
 	unsigned char * Blocks;
+	Octree Octree;
 	const char * Name;
 	const char * Creator;
 	long CreateTime;
@@ -36,8 +39,7 @@ typedef struct Level
 } * Level;
 
 Level LevelCreate(void);
-void LevelInitializeTransient(Level level);
-void LevelSetData(Level level, int w, int d, int h, unsigned char * blocks);
+void LevelSetData(Level level, ProgressBarDisplay progress, int w, int d, int h, unsigned char * blocks);
 void LevelFindSpawn(Level level);
 void LevelCalculateLightDepths(Level level, int x0, int y0, int x1, int y1);
 void LevelAddRenderer(Level level, struct LevelRenderer * listener);

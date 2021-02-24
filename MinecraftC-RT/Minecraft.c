@@ -940,7 +940,6 @@ void MinecraftSetLevel(Minecraft minecraft, Level level)
 	minecraft->Level = level;
 	if (level != NULL)
 	{
-		LevelInitializeTransient(level);
 		level->Font = minecraft->Font;
 		level->Minecraft = minecraft;
 		if (minecraft->Player != NULL) { EntityDestroy(minecraft->Player); }

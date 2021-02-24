@@ -18,22 +18,7 @@ Level LevelCreate()
 	return level;
 }
 
-void LevelInitializeTransient(Level level)
-{
-	if (level->Blocks == NULL) { LogFatal("The level is corrupt!\n"); }
-	//level->Renderers = ListCreate(sizeof(LevelRenderer));
-	//level->LightBlockers = MemoryAllocate(level->Width * level->Height * sizeof(int));
-	//for (int i = 0; i < level->Width * level->Height; i++) { level->LightBlockers[i] = level->Depth; }
-	//LevelCalculateLightDepths(level, 0, 0, level->Width, level->Height);
-	//level->Random = RandomGeneratorCreate(0);
-	//level->RandomValue = (int)RandomGeneratorInteger(level->Random);
-	level->SkyColor = ColorFromHex(0x99CCFFFF);
-	level->FogColor = ColorWhite;
-	level->CloudColor = ColorWhite;
-	LevelFindSpawn(level);
-}
-
-void LevelSetData(Level level, int w, int d, int h, unsigned char * blocks)
+void LevelSetData(Level level, ProgressBarDisplay display, int w, int d, int h, unsigned char * blocks)
 {
 	level->Width = w;
 	level->Depth = d;
@@ -45,8 +30,25 @@ void LevelSetData(Level level, int w, int d, int h, unsigned char * blocks)
 	LevelCalculateLightDepths(level, 0, 0, w, h);
 	for (int i = 0; i < ListCount(level->Renderers); i++) { LevelRendererRefresh(level->Renderers[i]); }
 	level->TickList = ListClear(level->TickList);
+	level->SkyColor = ColorFromHex(0x99CCFFFF);
+	level->FogColor = ColorWhite;
+	level->CloudColor = ColorWhite;
 	LevelFindSpawn(level);
-	LevelInitializeTransient(level);
+	
+	ProgressBarDisplaySetText(display, "Creating octree..");
+	level->Octree = OctreeCreate(level);
+	for (int x = 0; x < w; x++)
+	{
+		ProgressBarDisplaySetProgress(display, x * 100 / (w - 1));
+		for (int y = 0; y < d; y++)
+		{
+			for (int z = 0; z < h; z++)
+			{
+				BlockType tile = LevelGetTile(level, x, y, z);
+				if (tile != BlockTypeNone) { OctreeSet(level->Octree, x, y, z, tile); }
+			}
+		}
+	}
 }
 
 void LevelFindSpawn(Level level)
@@ -191,6 +193,7 @@ bool LevelNetSetTileNoNeighborChange(Level level, int x, int y, int z, BlockType
 	{
 		LevelRendererQueueChunks(level->Renderers[j], (int3){ x, y, z } - 1, (int3){ x, y, z } + 1);
 	}
+	OctreeSet(level->Octree, x, y, z, tile);
 	return true;
 }
 
@@ -618,5 +621,6 @@ void LevelDestroy(Level level)
 	ListDestroy(level->TickList);
 	if (level->LightBlockers != NULL) { MemoryFree(level->LightBlockers); }
 	if (level->Blocks != NULL) { MemoryFree(level->Blocks); }
+	if (level->Octree != NULL) { OctreeDestroy(level->Octree); }
 	MemoryFree(level);
 }
