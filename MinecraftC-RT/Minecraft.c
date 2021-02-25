@@ -764,7 +764,8 @@ void MinecraftRun(Minecraft minecraft)
 					RendererUpdateFog(renderer);
 					glEnable(GL_TEXTURE_2D);
 					glEnable(GL_BLEND);
-					glBindTexture(GL_TEXTURE_2D, TextureManagerLoad(minecraft->TextureManager, "Water.png"));
+					//glBindTexture(GL_TEXTURE_2D, TextureManagerLoad(minecraft->TextureManager, "Water.png"));
+					glBindTexture(GL_TEXTURE_2D, OctreeRenderer.TextureID);
 					glCallList(lrenderer->ListID + 1);
 					glDisable(GL_BLEND);
 					glEnable(GL_BLEND);
@@ -867,7 +868,7 @@ void MinecraftRun(Minecraft minecraft)
 					
 					if (!minecraft->Settings->Anaglyph) { break; }
 				}
-				
+				OctreeRendererEnqueue();
 				HUDScreenRender(minecraft->HUD, delta, minecraft->CurrentScreen != NULL, (int2){ mx, my });
 			}
 			else

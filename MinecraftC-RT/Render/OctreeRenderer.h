@@ -14,10 +14,10 @@ struct OctreeRenderer
 	cl_mem OctreeBuffer, BlockBuffer;
 	cl_mem TextureBuffer;
 	unsigned int TextureID;
-	unsigned int * TextureData;
 	Octree Octree;
 } extern OctreeRenderer;
 
 void OctreeRendererInitialize(int width, int height);
 void OctreeRendererSetOctree(Octree tree);
+void OctreeRendererEnqueue(void);
 void OctreeRendererDeinitialize(void);

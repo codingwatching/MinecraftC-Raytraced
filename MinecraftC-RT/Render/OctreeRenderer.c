@@ -11,17 +11,38 @@ void OctreeRendererInitialize(int width, int height)
 {
 	OctreeRenderer.Width = width;
 	OctreeRenderer.Height = height;
-	OctreeRenderer.TextureData = MemoryAllocate(width * height * sizeof(unsigned int));
 	glGenTextures(1, &OctreeRenderer.TextureID);
 	glBindTexture(GL_TEXTURE_2D, OctreeRenderer.TextureID);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, OctreeRenderer.TextureData);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glBindTexture(GL_TEXTURE_2D, 0);
 	
 	cl_platform_id platform;
 	if (clGetPlatformIDs(1, &platform, NULL) < 0) { LogFatal("Couldn't find a suitable platform for OpenCL\n"); }
-	if (clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &OctreeRenderer.Device, NULL) == CL_DEVICE_NOT_FOUND) { LogFatal("Sorry bitch you don't have a GPU\n"); }
+	if (clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &OctreeRenderer.Device, NULL) == CL_DEVICE_NOT_FOUND) { LogFatal("No supported GPU found\n"); }
 	
+	cl_context_properties properties[] =
+	{
+#ifdef __APPLE__
+		CL_CONTEXT_PROPERTY_USE_CGL_SHAREGROUP_APPLE,
+		(cl_context_properties)CGLGetShareGroup(CGLGetCurrentContext()),
+#elif defined(_WIN32)
+		CL_GL_CONTEXT_KHR, (cl_context_properties)wglGetCurrentContext(),
+		CL_WGL_HDC_KHR, (cl_context_properties)wglGetCurrentDC(),
+		CL_CONTEXT_PLATFORM, (cl_context_properties)platform,
+#elif defined(__linux__)
+		CL_GL_CONTEXT_KHR, (cl_context_properties)glXGetCurrentContext(),
+		CL_GLX_DISPLAY_KHR, (cl_context_properties)glXGetCurrentDisplay(),
+		CL_CONTEXT_PLATFORM, (cl_context_properties)platform,
+#endif
+		0,
+	};
+
 	int error;
-	OctreeRenderer.Context = clCreateContext(NULL, 1, &OctreeRenderer.Device, NULL, NULL, &error);
+	OctreeRenderer.Context = clCreateContext(properties, 1, &OctreeRenderer.Device, NULL, NULL, &error);
 	if (error < 0) { LogFatal("Failed to create context: %i\n", error); }
 	
 	SDL_RWops * shaderFile = SDL_RWFromFile("Shaders/Raytracer.cl", "r");
@@ -49,8 +70,8 @@ void OctreeRendererInitialize(int width, int height)
 	OctreeRenderer.Kernel = clCreateKernel(OctreeRenderer.Shader, "trace", &error);
 	if (error < 0) { LogFatal("Failed to create kernel: %i\n", error); }
 	
-	OctreeRenderer.TextureBuffer = clCreateBuffer(OctreeRenderer.Context, CL_MEM_WRITE_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(unsigned int) * width * height, OctreeRenderer.TextureData, &error);
-	if (error < 0) { LogFatal("Failed to create texture buffer: %i\n", error); }
+	OctreeRenderer.TextureBuffer = clCreateFromGLTexture(OctreeRenderer.Context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, OctreeRenderer.TextureID, &error);
+	if (error < 0) { LogFatal("Failed to create texture buffer: %i %i\n", error, CL_INVALID_GL_OBJECT); }
 	error = clSetKernelArg(OctreeRenderer.Kernel, 3, sizeof(int), &OctreeRenderer.Width);
 	error |= clSetKernelArg(OctreeRenderer.Kernel, 4, sizeof(int), &OctreeRenderer.Height);
 	error |= clSetKernelArg(OctreeRenderer.Kernel, 5, sizeof(cl_mem), &OctreeRenderer.TextureBuffer);
@@ -73,6 +94,18 @@ void OctreeRendererSetOctree(Octree tree)
 	if (error < 0) { LogFatal("Failed to set kernel arguments: %i\n", error); }
 }
 
+void OctreeRendererEnqueue()
+{
+	glFinish();
+	int error = clEnqueueAcquireGLObjects(OctreeRenderer.Queue, 1, &OctreeRenderer.TextureBuffer, 0, NULL, NULL);
+	if (error < 0) { LogFatal("Failed to aquire gl texture: %i\n"); }
+	error = clEnqueueNDRangeKernel(OctreeRenderer.Queue, OctreeRenderer.Kernel, 2, NULL, (size_t[]){ OctreeRenderer.Width, OctreeRenderer.Height }, (size_t[]){ 1, 1 }, 0, NULL, NULL);
+	if (error < 0) { LogFatal("Failed to enqueue octree renderer: %i\n"); }
+	error = clEnqueueReleaseGLObjects(OctreeRenderer.Queue, 1, &OctreeRenderer.TextureBuffer, 0, NULL, NULL);
+	if (error < 0) { LogFatal("Failed to release gl texture: %i\n"); }
+	clFinish(OctreeRenderer.Queue);
+}
+
 void OctreeRendererDeinitialize()
 {
 	clReleaseMemObject(OctreeRenderer.TextureBuffer);
@@ -84,5 +117,4 @@ void OctreeRendererDeinitialize()
 	clReleaseContext(OctreeRenderer.Context);
 	clReleaseDevice(OctreeRenderer.Device);
 	glDeleteTextures(1, &OctreeRenderer.TextureID);
-	MemoryFree(OctreeRenderer.TextureData);
 }
