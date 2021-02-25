@@ -764,8 +764,7 @@ void MinecraftRun(Minecraft minecraft)
 					RendererUpdateFog(renderer);
 					glEnable(GL_TEXTURE_2D);
 					glEnable(GL_BLEND);
-					//glBindTexture(GL_TEXTURE_2D, TextureManagerLoad(minecraft->TextureManager, "Water.png"));
-					glBindTexture(GL_TEXTURE_2D, OctreeRenderer.TextureID);
+					glBindTexture(GL_TEXTURE_2D, TextureManagerLoad(minecraft->TextureManager, "Water.png"));
 					glCallList(lrenderer->ListID + 1);
 					glDisable(GL_BLEND);
 					glEnable(GL_BLEND);
@@ -869,6 +868,19 @@ void MinecraftRun(Minecraft minecraft)
 					if (!minecraft->Settings->Anaglyph) { break; }
 				}
 				OctreeRendererEnqueue();
+				RendererEnableGUIMode(renderer);
+				glEnable(GL_TEXTURE_2D);
+				glBindTexture(GL_TEXTURE_2D, OctreeRenderer.TextureID);
+				glEnable(GL_BLEND);
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				glColor4f(1.0, 1.0, 1.0, 0.8);
+				ShapeRendererBegin();
+				ShapeRendererVertexUV((float3){ 0.0, minecraft->Height, 0.0 }, (float2){ 0.0, 0.0 });
+				ShapeRendererVertexUV((float3){ minecraft->Width, minecraft->Height, 0.0 }, (float2){ 2.0, 0.0 });
+				ShapeRendererVertexUV((float3){ minecraft->Width, 0.0, 0.0 }, (float2){ 2.0, 2.0 });
+				ShapeRendererVertexUV((float3){ 0.0, 0.0, 0.0 }, (float2){ 0.0, 2.0 });
+				ShapeRendererEnd();
+				glDisable(GL_BLEND);
 				HUDScreenRender(minecraft->HUD, delta, minecraft->CurrentScreen != NULL, (int2){ mx, my });
 			}
 			else
@@ -892,7 +904,7 @@ void MinecraftRun(Minecraft minecraft)
 			
 			while (TimeMilli() >= start + 1000)
 			{
-				String chunks = StringConcat(StringCreateFromInt(ChunkUpdates), " chunk updates");
+				String chunks = StringConcat(StringCreateFromInt(minecraft->Player->Position.x), " chunk updates");
 				minecraft->Debug = StringConcat(StringConcat(StringSetFromInt(minecraft->Debug, frame), " fps, "), chunks);
 				StringDestroy(chunks);
 				start += 1000;

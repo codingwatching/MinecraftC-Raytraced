@@ -2,6 +2,7 @@
 #include <OpenGL.h>
 #include "OctreeRenderer.h"
 #include "../Level/Level.h"
+#include "../Player/Player.h"
 #include "../Utilities/Log.h"
 #include "../Utilities/Memory.h"
 
@@ -60,9 +61,12 @@ void OctreeRendererInitialize(int width, int height)
 	error = clBuildProgram(OctreeRenderer.Shader, 0, NULL, NULL, NULL, NULL);
 	if (error < 0)
 	{
-		char log[1024];
-		clGetProgramBuildInfo(OctreeRenderer.Shader, OctreeRenderer.Device, CL_PROGRAM_BUILD_LOG, sizeof(log), log, NULL);
+		size_t logSize;
+		clGetProgramBuildInfo(OctreeRenderer.Shader, OctreeRenderer.Device, CL_PROGRAM_BUILD_LOG, 0, NULL, &logSize);
+		char * log = MemoryAllocate(logSize);
+		clGetProgramBuildInfo(OctreeRenderer.Shader, OctreeRenderer.Device, CL_PROGRAM_BUILD_LOG, logSize, log, NULL);
 		LogFatal("Failed to compile shader program: %s\n", log);
+		MemoryFree(log);
 	}
 	
 	OctreeRenderer.Queue = clCreateCommandQueue(OctreeRenderer.Context, OctreeRenderer.Device, 0, &error);
@@ -72,9 +76,7 @@ void OctreeRendererInitialize(int width, int height)
 	
 	OctreeRenderer.TextureBuffer = clCreateFromGLTexture(OctreeRenderer.Context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, OctreeRenderer.TextureID, &error);
 	if (error < 0) { LogFatal("Failed to create texture buffer: %i %i\n", error, CL_INVALID_GL_OBJECT); }
-	error = clSetKernelArg(OctreeRenderer.Kernel, 3, sizeof(int), &OctreeRenderer.Width);
-	error |= clSetKernelArg(OctreeRenderer.Kernel, 4, sizeof(int), &OctreeRenderer.Height);
-	error |= clSetKernelArg(OctreeRenderer.Kernel, 5, sizeof(cl_mem), &OctreeRenderer.TextureBuffer);
+	error = clSetKernelArg(OctreeRenderer.Kernel, 3, sizeof(cl_mem), &OctreeRenderer.TextureBuffer);
 	if (error < 0) { LogFatal("Failed to set kernel arguments: %i\n", error); }
 }
 
@@ -97,7 +99,11 @@ void OctreeRendererSetOctree(Octree tree)
 void OctreeRendererEnqueue()
 {
 	glFinish();
-	int error = clEnqueueAcquireGLObjects(OctreeRenderer.Queue, 1, &OctreeRenderer.TextureBuffer, 0, NULL, NULL);
+	Player player = OctreeRenderer.Octree->Level->Player;
+	Matrix4x4 camera = Matrix4x4Multiply(Matrix4x4FromTranslate(player->Position), Matrix4x4FromEulerAngles((float3){ 180.0 - player->Rotation.y, player->Rotation.x, 0.0 } * rad));
+	int error = clSetKernelArg(OctreeRenderer.Kernel, 4, sizeof(Matrix4x4), &camera);
+	if (error < 0) { LogFatal("Failed to set kernel argument: %i\n", error); }
+	error = clEnqueueAcquireGLObjects(OctreeRenderer.Queue, 1, &OctreeRenderer.TextureBuffer, 0, NULL, NULL);
 	if (error < 0) { LogFatal("Failed to aquire gl texture: %i\n"); }
 	error = clEnqueueNDRangeKernel(OctreeRenderer.Queue, OctreeRenderer.Kernel, 2, NULL, (size_t[]){ OctreeRenderer.Width, OctreeRenderer.Height }, (size_t[]){ 1, 1 }, 0, NULL, NULL);
 	if (error < 0) { LogFatal("Failed to enqueue octree renderer: %i\n"); }
