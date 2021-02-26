@@ -73,7 +73,9 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 	int offset = 0;
 	while (level < 8)
 	{
-		uchar mask = octree[(int)((pow(8.0f, (float)level) - 1.0f) / 7.0f) + offset];
+		int index = 1;
+		for (int j = 0; j < level; j++) { index *= 8; }
+		uchar mask = octree[(index - 1) / 7 + offset];
 		uint q = (hit->x > base.x + mid) + 2 * (hit->y > base.y + mid) + 4 * (hit->z > base.z + mid);
 		base += mid * convert_float3(((uint3){ q, q, q } >> (uint3){ 0, 1, 2 }) & 1);
 		
@@ -81,7 +83,7 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 		{
 			float enter, exit;
 			RayBox(ray, *hit, base, base + mid, &enter, &exit);
-			//if (exit - enter < 0.002f * distance(*hit, origin)) { *tile = 255; break; }
+			//if (exit - enter < 0.004f * distance(*hit, origin)) { *tile = 255; break; }
 			*hit += exit * ray + sign(ray) * size * 0.000001f;
 			if (hit->x >= size || hit->y >= size || hit->z >= size || hit->x <= 0.0f || hit->y <= 0.0f || hit->z <= 0.0f) { return false; }
 			
