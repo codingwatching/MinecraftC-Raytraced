@@ -505,7 +505,7 @@ void MinecraftRun(Minecraft minecraft)
 				reach = 32.0;
 				v2 = v + (float3){ sc, s2, cc } * reach;
 			
-				for (int i = 0; i <= 2; i++)
+				for (int i = 0; i <= 0; i++)
 				{
 					if (i == 2)
 					{

@@ -52,7 +52,8 @@ int GetTextureID(uchar tile, int side)
 
 float3 BGColor(float3 ray)
 {
-	return (float3){ 0.63, 0.8, 1.0 };
+	float t = 1.0 - (1.0 - ray.y) * (1.0 - ray.y);
+	return t * (float3){ 0.63, 0.8, 1.0 } + (1.0 - t) * (float3){ 1.0, 1.0, 1.0 };
 }
 
 bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, float size, float depth, float3 * hit, uchar * tile, float3 * normal, float4 * color)
@@ -155,7 +156,6 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 	
 	float4 finalColor = { BGColor(ray), 1.0 };
 	float depth = 1.0 / 0.0;
-	float3 lightPos = { 50.0, 100.0, 50.0 };
 	
 	float3 hit, normal;
 	float4 color;
@@ -163,7 +163,7 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 	if (RayTreeIntersection(octree, blocks, terrain, ray, origin, 256.0, depth, &hit, &tile, &normal, &color) && distance(hit, origin) < depth)
 	{
 		depth = distance(hit, origin);
-		float3 lightDir = normalize(lightPos - hit);
+		float3 lightDir = normalize((float3){ 1.0, 1.0, 0.5 });
 		float diff = max(dot(lightDir, normal), -1.0);
 		finalColor.xyz = color.xyz * (diff * 0.25 + 0.75);
 		
@@ -182,12 +182,12 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 		}
 		
 		float3 shadowHit;
-		if (RayTreeIntersection(octree, blocks, terrain, lightDir, hit + 0.001 * lightDir, 256.0, distance(hit, lightPos), &shadowHit, &tile, &normal, &color))
+		if (RayTreeIntersection(octree, blocks, terrain, lightDir, hit + 0.001 * lightDir, 256.0, 1.0 / 0.0, &shadowHit, &tile, &normal, &color))
 		{
 			finalColor.xyz *= 0.5;
 		}
 		
-		float w = clamp(depth / 200.0, 0.0, 1.0);
+		float w = clamp(depth / 128.0, 0.0, 0.6);
 		finalColor.xyz = finalColor.xyz * (1.0 - w) + BGColor(ray) * w;
 	}
 	if (tile == 255) { finalColor.xyz = (float3){ 0.0, 0.0, 0.0 }; }
