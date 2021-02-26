@@ -16,9 +16,11 @@ struct OctreeRenderer
 	cl_mem TerrainTexture;
 	unsigned int TextureID;
 	Octree Octree;
+	TextureManager TextureManager;
 } extern OctreeRenderer;
 
 void OctreeRendererInitialize(TextureManager textures, int width, int height);
+void OctreeRendererResize(int width, int height);
 void OctreeRendererSetOctree(Octree tree);
 void OctreeRendererEnqueue(void);
 void OctreeRendererDeinitialize(void);

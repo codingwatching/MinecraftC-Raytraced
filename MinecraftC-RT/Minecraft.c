@@ -318,7 +318,7 @@ void MinecraftRun(Minecraft minecraft)
 {
 	minecraft->Running = true;
 	
-	SDL_WindowFlags flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+	SDL_WindowFlags flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE;
 	if (minecraft->FullScreen) { flags |= SDL_WINDOW_FULLSCREEN_DESKTOP; }
 	minecraft->Window = SDL_CreateWindow("Minecraft 0.30", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, minecraft->Width, minecraft->Height, flags);
 	if (minecraft->Window == NULL) { LogFatal("Failed to create window: %s\n", SDL_GetError()); }
@@ -410,6 +410,20 @@ void MinecraftRun(Minecraft minecraft)
 		while (SDL_PollEvent(&event))
 		{
 			if (event.type == SDL_QUIT) { minecraft->Running = false; }
+			if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED)
+			{
+				SDL_GetWindowSize(minecraft->Window, &minecraft->Width, &minecraft->Height);
+				SDL_GL_GetDrawableSize(minecraft->Window, &minecraft->FrameWidth, &minecraft->FrameHeight);
+				HUDScreenDestroy(minecraft->HUD);
+				minecraft->HUD = HUDScreenCreate(minecraft, minecraft->Width, minecraft->Height);
+				OctreeRendererResize(minecraft->FrameWidth, minecraft->FrameHeight);
+				if (minecraft->CurrentScreen != NULL)
+				{
+					int w = minecraft->Width * 240 / minecraft->Height;
+					int h = minecraft->Height * 240 / minecraft->Height;
+					GUIScreenOpen(minecraft->CurrentScreen, minecraft, w, h);
+				}
+			}
 			SDL_Event copy;
 			memcpy(&copy, &event, sizeof(SDL_Event));
 			events = ListPush(events, &copy);
@@ -505,7 +519,8 @@ void MinecraftRun(Minecraft minecraft)
 				reach = 32.0;
 				v2 = v + (float3){ sc, s2, cc } * reach;
 			
-				for (int i = 0; i <= 0; i++)
+				bool render = false;
+				for (int i = 0; i <= 2 && render; i++)
 				{
 					if (i == 2)
 					{
@@ -868,18 +883,25 @@ void MinecraftRun(Minecraft minecraft)
 					if (!minecraft->Settings->Anaglyph) { break; }
 				}
 				OctreeRendererEnqueue();
-				RendererEnableGUIMode(renderer);
+				glMatrixMode(GL_PROJECTION);
+				glLoadIdentity();
+				glMatrixMode(GL_MODELVIEW);
+				glLoadIdentity();
 				glEnable(GL_TEXTURE_2D);
 				glBindTexture(GL_TEXTURE_2D, OctreeRenderer.TextureID);
 				glEnable(GL_BLEND);
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+				glBegin(GL_QUADS);
 				glColor4f(1.0, 1.0, 1.0, 1.0);
-				ShapeRendererBegin();
-				ShapeRendererVertexUV((float3){ 0.0, minecraft->FrameHeight, 0.0 }, (float2){ 0.0, 0.0 });
-				ShapeRendererVertexUV((float3){ minecraft->FrameWidth, minecraft->FrameHeight, 0.0 }, (float2){ 4.0, 0.0 });
-				ShapeRendererVertexUV((float3){ minecraft->FrameWidth, 0.0, 0.0 }, (float2){ 4.0, 4.0 });
-				ShapeRendererVertexUV((float3){ 0.0, 0.0, 0.0 }, (float2){ 0.0, 4.0 });
-				ShapeRendererEnd();
+				glTexCoord2f(0.0, 0.0);
+				glVertex2f(-1.0, -1.0);
+				glTexCoord2f(1.0, 0.0);
+				glVertex2f(1.0, -1.0);
+				glTexCoord2f(1.0, 1.0);
+				glVertex2f(1.0, 1.0);
+				glTexCoord2f(0.0, 1.0);
+				glVertex2f(-1.0, 1.0);
+				glEnd();
 				glDisable(GL_BLEND);
 				HUDScreenRender(minecraft->HUD, delta, minecraft->CurrentScreen != NULL, (int2){ mx, my });
 			}
@@ -1012,7 +1034,7 @@ void MinecraftDestroy(Minecraft minecraft)
 
 int main(int argc, char * argv[])
 {
-	Minecraft minecraft = MinecraftCreate(860, 480, false);
+	Minecraft minecraft = MinecraftCreate(1280, 720, false);
 	MinecraftRun(minecraft);
 	return 0;
 }

@@ -40,6 +40,8 @@ void LoadLevelScreenSetLevels(LoadLevelScreen screen, char * levels[5])
 void LoadLevelScreenOnOpen(LoadLevelScreen screen)
 {
 	LoadLevelScreenRun(screen);
+	for (int i = 0; i < ListCount(screen->Buttons); i++) { ButtonDestroy(screen->Buttons[i]); }
+	screen->Buttons = ListClear(screen->Buttons);
 	for (int i = 0; i < 5; i++)
 	{
 		screen->Buttons = ListPush(screen->Buttons, &(Button){ ButtonCreate(i, screen->Width / 2 - 100, screen->Height / 6 + i * 24, "---") });

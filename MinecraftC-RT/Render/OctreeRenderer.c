@@ -12,6 +12,7 @@ void OctreeRendererInitialize(TextureManager textures, int width, int height)
 {
 	OctreeRenderer.Width = width;
 	OctreeRenderer.Height = height;
+	OctreeRenderer.TextureManager = textures;
 	glGenTextures(1, &OctreeRenderer.TextureID);
 	glBindTexture(GL_TEXTURE_2D, OctreeRenderer.TextureID);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
@@ -83,6 +84,13 @@ void OctreeRendererInitialize(TextureManager textures, int width, int height)
 	if (error < 0) { LogFatal("Failed to create texture buffer: %i\n", error); }
 	error = clSetKernelArg(OctreeRenderer.Kernel, 5, sizeof(cl_mem), &OctreeRenderer.TerrainTexture);
 	if (error < 0) { LogFatal("Failed to set kernel arguments: %i\n", error); }
+}
+
+void OctreeRendererResize(int width, int height)
+{
+	OctreeRendererDeinitialize();
+	OctreeRendererInitialize(OctreeRenderer.TextureManager, width, height);
+	OctreeRendererSetOctree(OctreeRenderer.Octree);
 }
 
 void OctreeRendererSetOctree(Octree tree)

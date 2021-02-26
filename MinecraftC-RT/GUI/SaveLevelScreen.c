@@ -25,6 +25,8 @@ void SaveLevelScreenSetLevels(SaveLevelScreen screen, char * strings[5])
 
 void SaveLevelScreenOnOpen(SaveLevelScreen screen)
 {
+	for (int i = 0; i < ListCount(screen->Buttons); i++) { ButtonDestroy(screen->Buttons[i]); }
+	screen->Buttons = ListClear(screen->Buttons);
 	screen->Buttons[5]->Text = StringSet(screen->Buttons[5]->Text, "Save file...");
 }
 

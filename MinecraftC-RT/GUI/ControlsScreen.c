@@ -19,6 +19,8 @@ ControlsScreen ControlsScreenCreate(GUIScreen parent, GameSettings settings)
 void ControlsScreenOnOpen(ControlsScreen screen)
 {
 	ControlsScreenData this = screen->TypeData;
+	for (int i = 0; i < ListCount(screen->Buttons); i++) { ButtonDestroy(screen->Buttons[i]); }
+	screen->Buttons = ListClear(screen->Buttons);
 	for (int i = 0; i < ListCount(this->Settings->Bindings); i++)
 	{
 		String text = GameSettingsGetBinding(this->Settings, i);
