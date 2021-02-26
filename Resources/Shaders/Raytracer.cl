@@ -58,6 +58,7 @@ float3 BGColor(float3 ray)
 
 bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int treeDepth, float depth, float3 * hit, uchar * tile, float3 * normal, float4 * color)
 {
+	*tile = 0;
 	float size = pow(2.0, (float)treeDepth);
 	int sizei = 1;
 	for (int i = 0; i < treeDepth; i++) { sizei *= 2; }
@@ -174,18 +175,25 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 		float diff = max(dot(lightDir, normal), -1.0f);
 		finalColor.xyz = color.xyz * (diff * 0.25f + 0.75f);
 		
-		if (tile == BlockTypeWater || tile == BlockTypeStillWater)
+		float3 reflection = ray;
+		float3 rHit = hit;
+		float reflectiveness = 0.25;
+		for (int i = 0; i < 5; i++)
 		{
-			float3 r = normalize(ray - 2.0f * dot(ray, normal) * normal);
-			float3 rHit;
-			if (RayTreeIntersection(octree, blocks, terrain, r, hit + 0.001f * r, treeDepth, depth, &rHit, &tile, &normal, &color))
+			if (tile == BlockTypeWater || tile == BlockTypeStillWater)
 			{
-				finalColor.xyz = 0.75f * finalColor.xyz + 0.25f * color.xyz;
+				reflection = normalize(reflection - 2.0f * dot(reflection, normal) * normal);
+				if (RayTreeIntersection(octree, blocks, terrain, reflection, rHit + 0.001f * reflection, treeDepth, depth, &rHit, &tile, &normal, &color))
+				{
+					finalColor.xyz = (1.0 - reflectiveness) * finalColor.xyz + reflectiveness * color.xyz;
+				}
+				else
+				{
+					finalColor.xyz = (1.0 - reflectiveness) * finalColor.xyz + reflectiveness * BGColor(reflection);
+				}
+				reflectiveness /= 2.0;
 			}
-			else
-			{
-				finalColor.xyz = 0.75f * finalColor.xyz + 0.25f * BGColor(r);
-			}
+			else { break; }
 		}
 		
 		float3 shadowHit;
