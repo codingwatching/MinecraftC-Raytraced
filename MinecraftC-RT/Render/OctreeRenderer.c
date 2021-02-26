@@ -90,9 +90,9 @@ void OctreeRendererSetOctree(Octree tree)
 	OctreeRenderer.Octree = tree;
 	
 	int error;
-	OctreeRenderer.OctreeBuffer = clCreateBuffer(OctreeRenderer.Context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, tree->MaskCount, tree->Masks, &error);
+	OctreeRenderer.OctreeBuffer = clCreateBuffer(OctreeRenderer.Context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, tree->MaskCount, tree->Masks, &error);
 	if (error < 0) { LogFatal("Failed to create octree buffer: %i\n", error); }
-	OctreeRenderer.BlockBuffer = clCreateBuffer(OctreeRenderer.Context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, tree->Level->Width * tree->Level->Height * tree->Level->Depth, tree->Level->Blocks, &error);
+	OctreeRenderer.BlockBuffer = clCreateBuffer(OctreeRenderer.Context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, tree->Level->Width * tree->Level->Height * tree->Level->Depth, tree->Level->Blocks, &error);
 	if (error < 0) { LogFatal("Failed to create block buffer: %i\n", error); }
 	
 	error = clSetKernelArg(OctreeRenderer.Kernel, 0, sizeof(unsigned int), &tree->Depth);
