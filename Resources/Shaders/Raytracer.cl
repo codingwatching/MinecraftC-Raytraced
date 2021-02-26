@@ -141,14 +141,11 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 	return false;
 }
 
-__kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * blocks, __write_only image2d_t texture, float16 camera, __read_only image2d_t terrain)
+__kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * blocks, __write_only image2d_t texture, int width, int height, float16 camera, __read_only image2d_t terrain)
 {
 	int x = get_global_id(0);
 	int y = get_global_id(1);
-	int width = get_global_size(0);
-	int height = get_global_size(1);
-	int groupSize = get_local_size(0);
-	if (x >= width - width % groupSize || y >= height - height % groupSize) { return; }
+	if (x >= width || y >= height) { return; }
 	float2 uv = (float2){ 1.0f - 2.0f * (float)x / width, 2.0f * (float)y / height - 1.0f };
 	uv.x *= (float)width / height;
 	

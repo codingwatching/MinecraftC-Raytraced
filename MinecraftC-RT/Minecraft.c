@@ -883,7 +883,7 @@ void MinecraftRun(Minecraft minecraft)
 					
 					if (!minecraft->Settings->Anaglyph) { break; }
 				}
-				OctreeRendererEnqueue();
+				OctreeRendererEnqueue(delta);
 				glMatrixMode(GL_PROJECTION);
 				glLoadIdentity();
 				glMatrixMode(GL_MODELVIEW);
@@ -1035,7 +1035,7 @@ void MinecraftDestroy(Minecraft minecraft)
 
 int main(int argc, char * argv[])
 {
-	Minecraft minecraft = MinecraftCreate(1280, 720, false);
+	Minecraft minecraft = MinecraftCreate(860, 480, false);
 	MinecraftRun(minecraft);
 	return 0;
 }
