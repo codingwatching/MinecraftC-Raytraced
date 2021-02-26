@@ -365,7 +365,7 @@ void MinecraftRun(Minecraft minecraft)
 		if (level != NULL) { MinecraftSetLevel(minecraft, level); }
 	}
 	
-	if (minecraft->Level == NULL) { MinecraftGenerateLevel(minecraft, 1); }
+	if (minecraft->Level == NULL) { MinecraftGenerateLevel(minecraft, 0); }
 	minecraft->LevelLoaded = true;
 	
 	minecraft->ParticleManager = ParticleMangerCreate(minecraft->Level, minecraft->TextureManager);
@@ -967,7 +967,7 @@ void MinecraftGenerateLevel(Minecraft minecraft, int size)
 {
 	char * user = "anonymous";
 	LevelGenerator generator = LevelGeneratorCreate(minecraft->ProgressBar);
-	Level level = LevelGeneratorGenerate(generator, user, 128 << size, 128 << size, 64);
+	Level level = LevelGeneratorGenerate(generator, user, 128 << (size + 1), 128 << (size + 1), 64);
 	MinecraftSetLevel(minecraft, level);
 	LevelGeneratorDestroy(generator);
 }

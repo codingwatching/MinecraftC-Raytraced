@@ -99,6 +99,9 @@ void OctreeRendererSetOctree(Octree tree)
 {
 	OctreeRenderer.Octree = tree;
 	
+	if (OctreeRenderer.OctreeBuffer != NULL) { clReleaseMemObject(OctreeRenderer.OctreeBuffer); }
+	if (OctreeRenderer.BlockBuffer != NULL) { clReleaseMemObject(OctreeRenderer.BlockBuffer); }
+	
 	int error;
 	OctreeRenderer.OctreeBuffer = clCreateBuffer(OctreeRenderer.Context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, tree->MaskCount, tree->Masks, &error);
 	if (error < 0) { LogFatal("Failed to create octree buffer: %i\n", error); }

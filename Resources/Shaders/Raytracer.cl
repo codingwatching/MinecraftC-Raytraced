@@ -6,7 +6,7 @@
 
 const sampler_t TerrainSampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_NEAREST;
 
-constant int TextureIDTable[256] = { 0, 1, 0, 2, 16, 4, 15, 17, 14, 14, 30, 30, 18, 19, 32, 33, 34, 0, 22, 48, 49, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 13, 12, 29, 28, 40, 39, 0, 0, 7, 0, 0, 36, 37 };
+constant int TextureIDTable[256] = { 0, 2, 0, 3, 17, 5, 16, 17, 15, 15, 31, 31, 19, 20, 33, 34, 35, 0, 23, 49, 50, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 14, 13, 30, 29, 41, 40, 0, 0, 8, 0, 0, 37, 38 };
 
 float3 MatrixTransformPoint(float16 l, float3 r)
 {
@@ -47,7 +47,7 @@ int GetTextureID(uchar tile, int side)
 	if (tile == BlockTypeGrass) { return side == 1 ? 0 : (side == 0 ? 2 : 3); }
 	if (tile == BlockTypeLog) { return side == 1 ? 21 : (side == 0 ? 21 : 20); }
 	if (tile == BlockTypeBookshelf) { return side <= 1 ? 4 : 35; }
-	return TextureIDTable[tile];
+	return TextureIDTable[tile] - 1;
 }
 
 float3 BGColor(float3 ray)
@@ -56,8 +56,11 @@ float3 BGColor(float3 ray)
 	return t * (float3){ 0.63f, 0.8f, 1.0f } + (1.0f - t) * (float3){ 1.0f, 1.0f, 1.0f };
 }
 
-bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, float size, float depth, float3 * hit, uchar * tile, float3 * normal, float4 * color)
+bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int treeDepth, float depth, float3 * hit, uchar * tile, float3 * normal, float4 * color)
 {
+	float size = pow(2.0, (float)treeDepth);
+	int sizei = 1;
+	for (int i = 0; i < treeDepth; i++) { sizei *= 2; }
 	float dist;
 	if (!RayBoxIntersection(ray, origin, (float3){ 0.0f, 0.0f, 0.0f }, (float3){ 1.0f, 1.0f, 1.0f } * size, &dist) || dist > depth)
 	{
@@ -71,10 +74,9 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 	float mid = size / 2.0f;
 	int level = 0;
 	int offset = 0;
-	while (level < 8)
+	int index = 1;
+	while (level < treeDepth)
 	{
-		int index = 1;
-		for (int j = 0; j < level; j++) { index *= 8; }
 		uchar mask = octree[(index - 1) / 7 + offset];
 		uint q = (hit->x > base.x + mid) + 2 * (hit->y > base.y + mid) + 4 * (hit->z > base.z + mid);
 		base += mid * convert_float3(((uint3){ q, q, q } >> (uint3){ 0, 1, 2 }) & 1);
@@ -90,19 +92,20 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 			base = (float3){ 0.0f, 0.0f, 0.0f };
 			mid = size / 2.0f;
 			offset = 0;
+			index = 1;
 			level = 0;
 			continue;
 		}
 		
 		offset = 8 * offset + (int)q;
 
-		if (level == 7)
+		if (level == treeDepth - 1)
 		{
 			int3 v = convert_int3(base);
-			if (v.x >= 0 && v.y >= 0 && v.z >= 0 && v.x < 256 && v.y < 64 && v.z < 256)
+			if (v.x >= 0 && v.y >= 0 && v.z >= 0 && v.x < sizei && v.y < 64 && v.z < sizei)
 			{
 				*hit -= 0.000001f * sign(ray) * size;
-				*tile = blocks[(v.y * 256 + v.z) * 256 + v.x];
+				*tile = blocks[(v.y * sizei + v.z) * sizei + v.x];
 				float2 uv = (float2){ 0.0f, 0.0f };
 				float3 norm = *hit - base;
 				int side = 0;
@@ -115,6 +118,7 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 				int id = GetTextureID(*tile, side);
 				uv = uv / 16.0f + (float2){ (float)((id % 16) << 4), (float)((id / 16) << 4) } / 256.0f;
 				*color = read_imagef(terrain, TerrainSampler, uv);
+				if (id == -1) { *color = (float4){ 1.0, 0.0, 1.0, 1.0 }; }
 				if (color->w == 0.0f)
 				{
 					float enter, exit;
@@ -124,6 +128,7 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 					base = (float3){ 0.0f, 0.0f, 0.0f };
 					mid = size / 2.0f;
 					offset = 0;
+					index = 1;
 					level = 0;
 					continue;
 				}
@@ -138,6 +143,7 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 		}
 
 		mid /= 2.0f;
+		index *= 8;
 		level++;
 	}
 	return false;
@@ -161,7 +167,7 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 	float3 hit, normal;
 	float4 color;
 	uchar tile = 0;
-	if (RayTreeIntersection(octree, blocks, terrain, ray, origin, 256.0f, depth, &hit, &tile, &normal, &color) && distance(hit, origin) < depth)
+	if (RayTreeIntersection(octree, blocks, terrain, ray, origin, treeDepth, depth, &hit, &tile, &normal, &color) && distance(hit, origin) < depth)
 	{
 		depth = distance(hit, origin);
 		float3 lightDir = normalize((float3){ 1.0f, 1.0f, 0.5f });
@@ -172,7 +178,7 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 		{
 			float3 r = normalize(ray - 2.0f * dot(ray, normal) * normal);
 			float3 rHit;
-			if (RayTreeIntersection(octree, blocks, terrain, r, hit + 0.001f * r, 256.0f, depth, &rHit, &tile, &normal, &color))
+			if (RayTreeIntersection(octree, blocks, terrain, r, hit + 0.001f * r, treeDepth, depth, &rHit, &tile, &normal, &color))
 			{
 				finalColor.xyz = 0.75f * finalColor.xyz + 0.25f * color.xyz;
 			}
@@ -183,7 +189,7 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 		}
 		
 		float3 shadowHit;
-		if (RayTreeIntersection(octree, blocks, terrain, lightDir, hit + 0.001f * lightDir, 256.0f, 1.0f / 0.0f, &shadowHit, &tile, &normal, &color))
+		if (RayTreeIntersection(octree, blocks, terrain, lightDir, hit + 0.001f * lightDir, treeDepth, 1.0f / 0.0f, &shadowHit, &tile, &normal, &color))
 		{
 			finalColor.xyz *= 0.5f;
 		}

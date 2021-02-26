@@ -23,7 +23,7 @@ void PauseScreenOnOpen(PauseScreen screen)
 	screen->Buttons = ListPush(screen->Buttons, &(Button){ ButtonCreate(3, screen->Width / 2 - 100, screen->Height / 4 + 72, "Load level..") });
 	screen->Buttons = ListPush(screen->Buttons, &(Button){ ButtonCreate(4, screen->Width / 2 - 100, screen->Height / 4 + 120, "Back to game") });
 	
-	screen->Buttons[1]->Active = false;
+	screen->Buttons[1]->Active = true;
 	screen->Buttons[2]->Active = false;
 	screen->Buttons[3]->Active = false;
 }
