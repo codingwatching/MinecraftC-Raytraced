@@ -414,6 +414,7 @@ void MinecraftRun(Minecraft minecraft)
 			{
 				SDL_GetWindowSize(minecraft->Window, &minecraft->Width, &minecraft->Height);
 				SDL_GL_GetDrawableSize(minecraft->Window, &minecraft->FrameWidth, &minecraft->FrameHeight);
+				glViewport(0, 0, minecraft->FrameWidth, minecraft->FrameHeight);
 				HUDScreenDestroy(minecraft->HUD);
 				minecraft->HUD = HUDScreenCreate(minecraft, minecraft->Width, minecraft->Height);
 				OctreeRendererResize(minecraft->FrameWidth, minecraft->FrameHeight);

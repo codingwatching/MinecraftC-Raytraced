@@ -23,8 +23,28 @@ void OctreeRendererInitialize(TextureManager textures, int width, int height)
 	glBindTexture(GL_TEXTURE_2D, 0);
 	
 	cl_platform_id platform;
-	if (clGetPlatformIDs(1, &platform, NULL) < 0) { LogFatal("Couldn't find a suitable platform for OpenCL\n"); }
-	if (clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &OctreeRenderer.Device, NULL) == CL_DEVICE_NOT_FOUND) { LogFatal("No supported GPU found\n"); }
+	unsigned int platformCount = 0;
+	clGetPlatformIDs(0, NULL, &platformCount);
+	cl_platform_id * platforms = MemoryAllocate(platformCount * sizeof(cl_platform_id));
+	if (clGetPlatformIDs(platformCount, platforms, NULL) < 0) { LogFatal("Couldn't find a suitable platform for OpenCL\n"); }
+	for (int i = 0; i < platformCount; i++)
+	{
+		char name[1024];
+		clGetPlatformInfo(platforms[i], CL_PLATFORM_NAME, 1024, name, NULL);
+		LogDebug("%s\n", name);
+	}
+	platform = platforms[0];
+	MemoryFree(platforms);
+
+	unsigned int deviceCount = 0;
+	clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 0, NULL, &deviceCount);
+	cl_device_id * devices = MemoryAllocate(deviceCount * sizeof(cl_device_id));
+	if (clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, deviceCount, devices, NULL) == CL_DEVICE_NOT_FOUND) { LogFatal("No supported GPU found\n"); }
+	char name[128];
+	clGetDeviceInfo(devices[0], CL_DEVICE_VENDOR, 128, name, NULL);
+	LogDebug("%s\n", name);
+	OctreeRenderer.Device = devices[0];
+	MemoryFree(devices);
 	
 	cl_context_properties properties[] =
 	{
@@ -116,11 +136,13 @@ void OctreeRendererEnqueue()
 	Matrix4x4 camera = Matrix4x4Multiply(Matrix4x4FromTranslate(player->Position), Matrix4x4FromEulerAngles((float3){ 180.0 - player->Rotation.y, player->Rotation.x, 0.0 } * rad));
 	int error = clSetKernelArg(OctreeRenderer.Kernel, 4, sizeof(Matrix4x4), &camera);
 	if (error < 0) { LogFatal("Failed to set kernel argument: %i\n", error); }
-	error = clEnqueueAcquireGLObjects(OctreeRenderer.Queue, 1, &OctreeRenderer.OutputTexture, 0, NULL, NULL);
+	error = clEnqueueAcquireGLObjects(OctreeRenderer.Queue, 2, (cl_mem[]){ OctreeRenderer.OutputTexture, OctreeRenderer.TerrainTexture }, 0, NULL, NULL);
 	if (error < 0) { LogFatal("Failed to aquire gl texture: %i\n"); }
-	error = clEnqueueNDRangeKernel(OctreeRenderer.Queue, OctreeRenderer.Kernel, 2, NULL, (size_t[]){ OctreeRenderer.Width, OctreeRenderer.Height }, (size_t[]){ 1, 1 }, 0, NULL, NULL);
+	int groupSize = 50;
+	int w = OctreeRenderer.Width, h = OctreeRenderer.Height;
+	error = clEnqueueNDRangeKernel(OctreeRenderer.Queue, OctreeRenderer.Kernel, 2, NULL, (size_t[]){ w - w % groupSize, h - h % groupSize }, (size_t[]){ groupSize, 1 }, 0, NULL, NULL);
 	if (error < 0) { LogFatal("Failed to enqueue octree renderer: %i\n"); }
-	error = clEnqueueReleaseGLObjects(OctreeRenderer.Queue, 1, &OctreeRenderer.OutputTexture, 0, NULL, NULL);
+	error = clEnqueueReleaseGLObjects(OctreeRenderer.Queue, 2, (cl_mem[]){ OctreeRenderer.OutputTexture, OctreeRenderer.TerrainTexture }, 0, NULL, NULL);
 	if (error < 0) { LogFatal("Failed to release gl texture: %i\n"); }
 	clFinish(OctreeRenderer.Queue);
 }

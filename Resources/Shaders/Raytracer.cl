@@ -20,7 +20,7 @@ float3 MatrixTransformPoint(float16 l, float3 r)
 
 void RayBox(float3 r, float3 o, float3 bmin, float3 bmax, float * enter, float * exit)
 {
-	float3 inv = 1.0 / r;
+	float3 inv = 1.0f / r;
 	float3 t1 = (bmin - o) * inv;
 	float3 t2 = (bmax - o) * inv;
 	float3 tn = fmin(t1, t2);
@@ -34,12 +34,12 @@ bool RayBoxIntersection(float3 r, float3 o, float3 bmin, float3 bmax, float * di
 	float n, f;
 	RayBox(r, o, bmin, bmax, &n, &f);
 	*dist = n;
-	return f > n && f > 0.0;
+	return f > n && f > 0.0f;
 }
 
 float3 BoxNormal(float3 hit, float3 bmin, float3 bmax)
 {
-	return normalize(round((hit - (bmin + bmax) / 2.0) / (fabs(bmin - bmax)) * 1.0001));
+	return normalize(round((hit - (bmin + bmax) / 2.0f) / (fabs(bmin - bmax)) * 1.0001f));
 }
 
 int GetTextureID(uchar tile, int side)
@@ -52,28 +52,28 @@ int GetTextureID(uchar tile, int side)
 
 float3 BGColor(float3 ray)
 {
-	float t = 1.0 - (1.0 - ray.y) * (1.0 - ray.y);
-	return t * (float3){ 0.63, 0.8, 1.0 } + (1.0 - t) * (float3){ 1.0, 1.0, 1.0 };
+	float t = 1.0f - (1.0f - ray.y) * (1.0f - ray.y);
+	return t * (float3){ 0.63f, 0.8f, 1.0f } + (1.0f - t) * (float3){ 1.0f, 1.0f, 1.0f };
 }
 
 bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, float size, float depth, float3 * hit, uchar * tile, float3 * normal, float4 * color)
 {
 	float dist;
-	if (!RayBoxIntersection(ray, origin, (float3){ 0.0, 0.0, 0.0 }, (float3){ 1.0, 1.0, 1.0 } * size, &dist) || dist > depth)
+	if (!RayBoxIntersection(ray, origin, (float3){ 0.0f, 0.0f, 0.0f }, (float3){ 1.0f, 1.0f, 1.0f } * size, &dist) || dist > depth)
 	{
 		*hit = ray * dist + origin;
 		return false;
 	}
 	
-	*hit = origin + max(dist, 0.0) * ray;
-	*color = (float4){ 0.0, 0.0, 0.0, 0.0 };
-	float3 base = { 0.0, 0.0, 0.0 };
-	float mid = size / 2.0;
+	*hit = origin + fmax(dist, 0.0f) * ray;
+	*color = (float4){ 0.0f, 0.0f, 0.0f, 0.0f };
+	float3 base = { 0.0f, 0.0f, 0.0f };
+	float mid = size / 2.0f;
 	int level = 0;
 	int offset = 0;
 	while (level < 8)
 	{
-		uchar mask = octree[(int)((pow(8.0, float(level)) - 1.0) / 7.0) + offset];
+		uchar mask = octree[(int)((pow(8.0f, (float)level) - 1.0f) / 7.0f) + offset];
 		uint q = (hit->x > base.x + mid) + 2 * (hit->y > base.y + mid) + 4 * (hit->z > base.z + mid);
 		base += mid * convert_float3(((uint3){ q, q, q } >> (uint3){ 0, 1, 2 }) & 1);
 		
@@ -81,46 +81,46 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 		{
 			float enter, exit;
 			RayBox(ray, *hit, base, base + mid, &enter, &exit);
-			//if (exit - enter < 0.002 * distance(*hit, origin)) { *tile = 255; break; }
-			*hit += exit * ray + sign(ray) * size * 0.000001;
-			if (hit->x >= size || hit->y >= size || hit->z >= size || hit->x <= 0.0 || hit->y <= 0.0 || hit->z <= 0.0) { return false; }
+			//if (exit - enter < 0.002f * distance(*hit, origin)) { *tile = 255; break; }
+			*hit += exit * ray + sign(ray) * size * 0.000001f;
+			if (hit->x >= size || hit->y >= size || hit->z >= size || hit->x <= 0.0f || hit->y <= 0.0f || hit->z <= 0.0f) { return false; }
 			
-			base = (float3){ 0.0, 0.0, 0.0 };
-			mid = size / 2.0;
+			base = (float3){ 0.0f, 0.0f, 0.0f };
+			mid = size / 2.0f;
 			offset = 0;
 			level = 0;
 			continue;
 		}
 		
-		offset = 8 * offset + int(q);
+		offset = 8 * offset + (int)q;
 
 		if (level == 7)
 		{
 			int3 v = convert_int3(base);
 			if (v.x >= 0 && v.y >= 0 && v.z >= 0 && v.x < 256 && v.y < 64 && v.z < 256)
 			{
-				*hit -= 0.000001 * sign(ray) * size;
+				*hit -= 0.000001f * sign(ray) * size;
 				*tile = blocks[(v.y * 256 + v.z) * 256 + v.x];
-				float2 uv = (float2){ 0.0, 0.0 };
+				float2 uv = (float2){ 0.0f, 0.0f };
 				float3 norm = *hit - base;
 				int side = 0;
-				if (norm.x == 0.0) { uv = (float2){ norm.z, 1.0 - norm.y }; side = 5; }
-				if (norm.x == 1.0) { uv = (float2){ 1.0 - norm.z, 1.0 - norm.y }; side = 4; }
-				if (norm.y == 0.0) { uv = norm.xz; side = 0; }
-				if (norm.y == 1.0) { uv = norm.xz; side = 1; }
-				if (norm.z == 0.0) { uv = (float2){ 1.0 - norm.x, 1.0 - norm.y }; side = 3; }
-				if (norm.z == 1.0) { uv = (float2){ norm.x, 1.0 - norm.y }; side = 2; }
+				if (norm.x == 0.0f) { uv = (float2){ norm.z, 1.0f - norm.y }; side = 5; }
+				if (norm.x == 1.0f) { uv = (float2){ 1.0f - norm.z, 1.0 - norm.y }; side = 4; }
+				if (norm.y == 0.0f) { uv = norm.xz; side = 0; }
+				if (norm.y == 1.0f) { uv = norm.xz; side = 1; }
+				if (norm.z == 0.0f) { uv = (float2){ 1.0f - norm.x, 1.0f - norm.y }; side = 3; }
+				if (norm.z == 1.0f) { uv = (float2){ norm.x, 1.0f - norm.y }; side = 2; }
 				int id = GetTextureID(*tile, side);
-				uv = uv / 16.0 + convert_float2((int2){ id % 16, id / 16 } << 4) / 256.0;
+				uv = uv / 16.0f + (float2){ (float)((id % 16) << 4), (float)((id / 16) << 4) } / 256.0f;
 				*color = read_imagef(terrain, TerrainSampler, uv);
-				if (color->w == 0.0)
+				if (color->w == 0.0f)
 				{
 					float enter, exit;
 					RayBox(ray, *hit, base, base + mid, &enter, &exit);
-					*hit += exit * ray + sign(ray) * size * 0.000001;
-					if (hit->x >= size || hit->y >= size || hit->z >= size || hit->x <= 0.0 || hit->y <= 0.0 || hit->z <= 0.0) { return false; }
-					base = (float3){ 0.0, 0.0, 0.0 };
-					mid = size / 2.0;
+					*hit += exit * ray + sign(ray) * size * 0.000001f;
+					if (hit->x >= size || hit->y >= size || hit->z >= size || hit->x <= 0.0f || hit->y <= 0.0f || hit->z <= 0.0f) { return false; }
+					base = (float3){ 0.0f, 0.0f, 0.0f };
+					mid = size / 2.0f;
 					offset = 0;
 					level = 0;
 					continue;
@@ -135,7 +135,7 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 			}
 		}
 
-		mid /= 2.0;
+		mid /= 2.0f;
 		level++;
 	}
 	return false;
@@ -147,49 +147,51 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 	int y = get_global_id(1);
 	int width = get_global_size(0);
 	int height = get_global_size(1);
-	float2 uv = (float2){ 1.0 - 2.0 * (float)x / width, 2.0 * (float)y / height - 1.0 };
+	int groupSize = get_local_size(0);
+	if (x >= width - width % groupSize || y >= height - height % groupSize) { return; }
+	float2 uv = (float2){ 1.0f - 2.0f * (float)x / width, 2.0f * (float)y / height - 1.0f };
 	uv.x *= (float)width / height;
 	
-	float fov = 70.0;
-	float3 origin = MatrixTransformPoint(camera, (float3){ 0.0, 0.0, 0.0 });
-	float3 ray = normalize(MatrixTransformPoint(camera, (float3){ uv * 0.5, 0.5 / tanpi(fov / 360.0) }) - origin);
+	float fov = 70.0f;
+	float3 origin = MatrixTransformPoint(camera, (float3){ 0.0f, 0.0f, 0.0f });
+	float3 ray = normalize(MatrixTransformPoint(camera, (float3){ uv * 0.5f, 0.5f / tanpi(fov / 360.0f) }) - origin);
 	
-	float4 finalColor = { BGColor(ray), 1.0 };
-	float depth = 1.0 / 0.0;
+	float4 finalColor = { BGColor(ray), 1.0f };
+	float depth = 1.0f / 0.0f;
 	
 	float3 hit, normal;
 	float4 color;
 	uchar tile = 0;
-	if (RayTreeIntersection(octree, blocks, terrain, ray, origin, 256.0, depth, &hit, &tile, &normal, &color) && distance(hit, origin) < depth)
+	if (RayTreeIntersection(octree, blocks, terrain, ray, origin, 256.0f, depth, &hit, &tile, &normal, &color) && distance(hit, origin) < depth)
 	{
 		depth = distance(hit, origin);
-		float3 lightDir = normalize((float3){ 1.0, 1.0, 0.5 });
-		float diff = max(dot(lightDir, normal), -1.0);
-		finalColor.xyz = color.xyz * (diff * 0.25 + 0.75);
+		float3 lightDir = normalize((float3){ 1.0f, 1.0f, 0.5f });
+		float diff = max(dot(lightDir, normal), -1.0f);
+		finalColor.xyz = color.xyz * (diff * 0.25f + 0.75f);
 		
 		if (tile == BlockTypeWater || tile == BlockTypeStillWater)
 		{
-			float3 r = normalize(ray - 2.0 * dot(ray, normal) * normal);
+			float3 r = normalize(ray - 2.0f * dot(ray, normal) * normal);
 			float3 rHit;
-			if (RayTreeIntersection(octree, blocks, terrain, r, hit + 0.001 * r, 256.0, depth, &rHit, &tile, &normal, &color))
+			if (RayTreeIntersection(octree, blocks, terrain, r, hit + 0.001f * r, 256.0f, depth, &rHit, &tile, &normal, &color))
 			{
-				finalColor.xyz = 0.75 * finalColor.xyz + 0.25 * color.xyz;
+				finalColor.xyz = 0.75f * finalColor.xyz + 0.25f * color.xyz;
 			}
 			else
 			{
-				finalColor.xyz = 0.75 * finalColor.xyz + 0.25 * BGColor(r);
+				finalColor.xyz = 0.75f * finalColor.xyz + 0.25f * BGColor(r);
 			}
 		}
 		
 		float3 shadowHit;
-		if (RayTreeIntersection(octree, blocks, terrain, lightDir, hit + 0.001 * lightDir, 256.0, 1.0 / 0.0, &shadowHit, &tile, &normal, &color))
+		if (RayTreeIntersection(octree, blocks, terrain, lightDir, hit + 0.001f * lightDir, 256.0f, 1.0f / 0.0f, &shadowHit, &tile, &normal, &color))
 		{
-			finalColor.xyz *= 0.5;
+			finalColor.xyz *= 0.5f;
 		}
 		
-		float w = clamp(depth / 128.0, 0.0, 0.6);
-		finalColor.xyz = finalColor.xyz * (1.0 - w) + BGColor(ray) * w;
+		float w = clamp(depth / 128.0f, 0.0f, 0.6f);
+		finalColor.xyz = finalColor.xyz * (1.0f - w) + BGColor(ray) * w;
 	}
-	if (tile == 255) { finalColor.xyz = (float3){ 0.0, 0.0, 0.0 }; }
+	if (tile == 255) { finalColor.xyz = (float3){ 0.0f, 0.0f, 0.0f }; }
 	write_imagef(texture, (int2){ x, y }, finalColor);
 }
