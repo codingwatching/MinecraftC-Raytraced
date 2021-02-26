@@ -348,7 +348,6 @@ void MinecraftRun(Minecraft minecraft)
 	BlocksInitialize();
 	ShapeRendererInitialize();
 	SessionDataInitialize();
-	OctreeRendererInitialize(minecraft->FrameWidth, minecraft->FrameHeight);
 	minecraft->WorkingDirectory = SDL_GetPrefPath("NotMojang", "MinecraftC");
 	minecraft->Settings = GameSettingsCreate(minecraft);
 	SDL_GL_SetSwapInterval(minecraft->Settings->LimitFramerate ? 1 : 0);
@@ -357,6 +356,7 @@ void MinecraftRun(Minecraft minecraft)
 	TextureManagerRegisterAnimation(minecraft->TextureManager, WaterTextureCreate());
 	minecraft->Font = FontRendererCreate(minecraft->Settings, "Default.png", minecraft->TextureManager);
 	minecraft->LevelRenderer = LevelRendererCreate(minecraft, minecraft->TextureManager);
+	OctreeRendererInitialize(minecraft->TextureManager, minecraft->FrameWidth, minecraft->FrameHeight);
 	glViewport(0, 0, minecraft->FrameWidth, minecraft->FrameHeight);
 	
 	if (!minecraft->LevelLoaded)
@@ -873,12 +873,12 @@ void MinecraftRun(Minecraft minecraft)
 				glBindTexture(GL_TEXTURE_2D, OctreeRenderer.TextureID);
 				glEnable(GL_BLEND);
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-				glColor4f(1.0, 1.0, 1.0, 0.8);
+				glColor4f(1.0, 1.0, 1.0, 1.0);
 				ShapeRendererBegin();
-				ShapeRendererVertexUV((float3){ 0.0, minecraft->Height, 0.0 }, (float2){ 0.0, 0.0 });
-				ShapeRendererVertexUV((float3){ minecraft->Width, minecraft->Height, 0.0 }, (float2){ 2.0, 0.0 });
-				ShapeRendererVertexUV((float3){ minecraft->Width, 0.0, 0.0 }, (float2){ 2.0, 2.0 });
-				ShapeRendererVertexUV((float3){ 0.0, 0.0, 0.0 }, (float2){ 0.0, 2.0 });
+				ShapeRendererVertexUV((float3){ 0.0, minecraft->FrameHeight, 0.0 }, (float2){ 0.0, 0.0 });
+				ShapeRendererVertexUV((float3){ minecraft->FrameWidth, minecraft->FrameHeight, 0.0 }, (float2){ 4.0, 0.0 });
+				ShapeRendererVertexUV((float3){ minecraft->FrameWidth, 0.0, 0.0 }, (float2){ 4.0, 4.0 });
+				ShapeRendererVertexUV((float3){ 0.0, 0.0, 0.0 }, (float2){ 0.0, 4.0 });
 				ShapeRendererEnd();
 				glDisable(GL_BLEND);
 				HUDScreenRender(minecraft->HUD, delta, minecraft->CurrentScreen != NULL, (int2){ mx, my });

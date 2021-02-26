@@ -12,12 +12,13 @@ struct OctreeRenderer
 	cl_kernel Kernel;
 	cl_command_queue Queue;
 	cl_mem OctreeBuffer, BlockBuffer;
-	cl_mem TextureBuffer;
+	cl_mem OutputTexture;
+	cl_mem TerrainTexture;
 	unsigned int TextureID;
 	Octree Octree;
 } extern OctreeRenderer;
 
-void OctreeRendererInitialize(int width, int height);
+void OctreeRendererInitialize(TextureManager textures, int width, int height);
 void OctreeRendererSetOctree(Octree tree);
 void OctreeRendererEnqueue(void);
 void OctreeRendererDeinitialize(void);

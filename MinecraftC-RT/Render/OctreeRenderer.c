@@ -8,7 +8,7 @@
 
 struct OctreeRenderer OctreeRenderer = { 0 };
 
-void OctreeRendererInitialize(int width, int height)
+void OctreeRendererInitialize(TextureManager textures, int width, int height)
 {
 	OctreeRenderer.Width = width;
 	OctreeRenderer.Height = height;
@@ -74,9 +74,14 @@ void OctreeRendererInitialize(int width, int height)
 	OctreeRenderer.Kernel = clCreateKernel(OctreeRenderer.Shader, "trace", &error);
 	if (error < 0) { LogFatal("Failed to create kernel: %i\n", error); }
 	
-	OctreeRenderer.TextureBuffer = clCreateFromGLTexture(OctreeRenderer.Context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, OctreeRenderer.TextureID, &error);
-	if (error < 0) { LogFatal("Failed to create texture buffer: %i %i\n", error, CL_INVALID_GL_OBJECT); }
-	error = clSetKernelArg(OctreeRenderer.Kernel, 3, sizeof(cl_mem), &OctreeRenderer.TextureBuffer);
+	OctreeRenderer.OutputTexture = clCreateFromGLTexture(OctreeRenderer.Context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, OctreeRenderer.TextureID, &error);
+	if (error < 0) { LogFatal("Failed to create texture buffer: %i\n", error); }
+	error = clSetKernelArg(OctreeRenderer.Kernel, 3, sizeof(cl_mem), &OctreeRenderer.OutputTexture);
+	if (error < 0) { LogFatal("Failed to set kernel arguments: %i\n", error); }
+	
+	OctreeRenderer.TerrainTexture = clCreateFromGLTexture(OctreeRenderer.Context, CL_MEM_READ_ONLY, GL_TEXTURE_2D, 0, TextureManagerLoad(textures, "Terrain.png"), &error);
+	if (error < 0) { LogFatal("Failed to create texture buffer: %i\n", error); }
+	error = clSetKernelArg(OctreeRenderer.Kernel, 5, sizeof(cl_mem), &OctreeRenderer.TerrainTexture);
 	if (error < 0) { LogFatal("Failed to set kernel arguments: %i\n", error); }
 }
 
@@ -103,20 +108,21 @@ void OctreeRendererEnqueue()
 	Matrix4x4 camera = Matrix4x4Multiply(Matrix4x4FromTranslate(player->Position), Matrix4x4FromEulerAngles((float3){ 180.0 - player->Rotation.y, player->Rotation.x, 0.0 } * rad));
 	int error = clSetKernelArg(OctreeRenderer.Kernel, 4, sizeof(Matrix4x4), &camera);
 	if (error < 0) { LogFatal("Failed to set kernel argument: %i\n", error); }
-	error = clEnqueueAcquireGLObjects(OctreeRenderer.Queue, 1, &OctreeRenderer.TextureBuffer, 0, NULL, NULL);
+	error = clEnqueueAcquireGLObjects(OctreeRenderer.Queue, 1, &OctreeRenderer.OutputTexture, 0, NULL, NULL);
 	if (error < 0) { LogFatal("Failed to aquire gl texture: %i\n"); }
 	error = clEnqueueNDRangeKernel(OctreeRenderer.Queue, OctreeRenderer.Kernel, 2, NULL, (size_t[]){ OctreeRenderer.Width, OctreeRenderer.Height }, (size_t[]){ 1, 1 }, 0, NULL, NULL);
 	if (error < 0) { LogFatal("Failed to enqueue octree renderer: %i\n"); }
-	error = clEnqueueReleaseGLObjects(OctreeRenderer.Queue, 1, &OctreeRenderer.TextureBuffer, 0, NULL, NULL);
+	error = clEnqueueReleaseGLObjects(OctreeRenderer.Queue, 1, &OctreeRenderer.OutputTexture, 0, NULL, NULL);
 	if (error < 0) { LogFatal("Failed to release gl texture: %i\n"); }
 	clFinish(OctreeRenderer.Queue);
 }
 
 void OctreeRendererDeinitialize()
 {
-	clReleaseMemObject(OctreeRenderer.TextureBuffer);
+	clReleaseMemObject(OctreeRenderer.OutputTexture);
 	clReleaseMemObject(OctreeRenderer.OctreeBuffer);
 	clReleaseMemObject(OctreeRenderer.BlockBuffer);
+	clReleaseMemObject(OctreeRenderer.TerrainTexture);
 	clReleaseKernel(OctreeRenderer.Kernel);
 	clReleaseCommandQueue(OctreeRenderer.Queue);
 	clReleaseProgram(OctreeRenderer.Shader);
