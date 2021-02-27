@@ -1,9 +1,19 @@
 #define BlockTypeGrass 2
+#define BlockTypeSapling 6
 #define BlockTypeWater 8
 #define BlockTypeStillWater 9
 #define BlockTypeLog 17
 #define BlockTypeLeaves 18
 #define BlockTypeGlass 20
+#define BlockTypeDandelion 37
+#define BlockTypeRose 38
+#define BlockTypeBrownMushroom 39
+#define BlockTypeRedMushroom 40
+#define BlockTypeGold 41
+#define BlockTypeIron 42
+#define BlockTypeDoubleSlab 43
+#define BlockTypeSlab 44
+#define BlockTypeTNT 46
 #define BlockTypeBookshelf 47
 
 const sampler_t TerrainSampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_NEAREST;
@@ -48,7 +58,11 @@ int GetTextureID(uchar tile, int side)
 {
 	if (tile == BlockTypeGrass) { return side == 1 ? 0 : (side == 0 ? 2 : 3); }
 	if (tile == BlockTypeLog) { return side == 1 ? 21 : (side == 0 ? 21 : 20); }
+	if (tile == BlockTypeSlab || tile == BlockTypeDoubleSlab) { return side <= 1 ? 6 : 5; }
 	if (tile == BlockTypeBookshelf) { return side <= 1 ? 4 : 35; }
+	if (tile == BlockTypeGold || tile == BlockTypeIron) { return side == 1 ? TextureIDTable[tile] - 17 : (side == 0 ? TextureIDTable[tile] + 15 : TextureIDTable[tile] - 1); }
+	if (tile == BlockTypeTNT) { return side == 0 ? 10 : (side == 1 ? 9 : 8); }
+	if (tile == BlockTypeDandelion || tile == BlockTypeRose || tile == BlockTypeSapling || tile == BlockTypeBrownMushroom || tile == BlockTypeRedMushroom) { return side == 0 || side == 1 ? -2 : TextureIDTable[tile] - 1; }
 	return TextureIDTable[tile] - 1;
 }
 
@@ -59,13 +73,18 @@ float GetTileReflectiveness(uchar tile)
 	return 0.0;
 }
 
+bool ShouldDiscardTransparency(uchar tile)
+{
+	return tile == BlockTypeLeaves || tile == BlockTypeDandelion || tile == BlockTypeRose || tile == BlockTypeRedMushroom || tile == BlockTypeBrownMushroom;
+}
+
 float3 BGColor(float3 ray)
 {
 	float t = 1.0f - (1.0f - ray.y) * (1.0f - ray.y);
 	return t * (float3){ 0.63f, 0.8f, 1.0f } + (1.0f - t) * (float3){ 1.0f, 1.0f, 1.0f };
 }
 
-bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int treeDepth, float3 * hit, float3 * hitExit, uchar * tile, float3 * normal, float4 * color)
+bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int treeDepth, bool ignoreWater, float3 * hit, float3 * hitExit, uchar * tile, float3 * normal, float4 * color)
 {
 	*tile = 0;
 	float size = pow(2.0f, (float)treeDepth);
@@ -131,7 +150,7 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 				int id = GetTextureID(*tile, side);
 				uv = uv / 16.0f + (float2){ (float)((id % 16) << 4), (float)((id / 16) << 4) } / 256.0f;
 				*color = read_imagef(terrain, TerrainSampler, uv);
-				if ((*tile == BlockTypeLeaves) && color->w == 0.0)
+				if (id == -2 || (ShouldDiscardTransparency(*tile) && color->w == 0.0) || ((*tile == BlockTypeWater || *tile == BlockTypeStillWater) && ignoreWater))
 				{
 					*hit = *hitExit;
 					if (hit->x >= size || hit->y >= size || hit->z >= size || hit->x <= 0.0f || hit->y <= 0.0f || hit->z <= 0.0f) { return false; }
@@ -176,7 +195,7 @@ float3 TraceShadows(float3 color, float3 lightDir, __global uchar * octree, __gl
 	float3 waterEntry = hit;
 	while (hitColor.w < 1.0)
 	{
-		if (RayTreeIntersection(octree, blocks, terrain, lightDir, exit, treeDepth, &shadowHit, &exit, &tile, &normal, &hitColor))
+		if (RayTreeIntersection(octree, blocks, terrain, lightDir, exit, treeDepth, inWater, &shadowHit, &exit, &tile, &normal, &hitColor))
 		{
 			if (inWater)
 			{
@@ -214,7 +233,7 @@ float3 TraceReflections(float3 color, float reflectiveness, float3 normal, __glo
 	float3 waterEntry = hit;
 	while (hitColor.w < 1.0f)
 	{
-		if (RayTreeIntersection(octree, blocks, terrain, rRay, exit, treeDepth, &rHit, &exit, &tile, &rNormal, &hitColor))
+		if (RayTreeIntersection(octree, blocks, terrain, rRay, exit, treeDepth, inWater, &rHit, &exit, &tile, &rNormal, &hitColor))
 		{
 			if (inWater)
 			{
@@ -266,7 +285,7 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 	float3 waterEntry = origin;
 	while (hitColor.w < 1.0f)
 	{
-		if (RayTreeIntersection(octree, blocks, terrain, ray, exit, treeDepth, &hit, &exit, &tile, &normal, &hitColor))
+		if (RayTreeIntersection(octree, blocks, terrain, ray, exit, treeDepth, inWater, &hit, &exit, &tile, &normal, &hitColor))
 		{
 			if (inWater)
 			{
