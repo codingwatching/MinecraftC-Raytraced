@@ -1001,6 +1001,8 @@ void MinecraftSetLevel(Minecraft minecraft, Level level)
 	
 	if (minecraft->LevelRenderer != NULL)
 	{
+		LevelRendererDestroy(minecraft->LevelRenderer);
+		minecraft->LevelRenderer = LevelRendererCreate(minecraft, minecraft->TextureManager);
 		minecraft->LevelRenderer->Level = level;
 		if (level != NULL)
 		{

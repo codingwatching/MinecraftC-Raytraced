@@ -96,7 +96,7 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 			float enter, exit;
 			RayBox(ray, *hit, base, base + mid, &enter, &exit);
 			//if (exit - enter < 0.004f * distance(*hit, origin)) { *tile = 255; break; }
-			*hit += exit * ray + sign(ray) * size * 0.000001f;
+			*hit += exit * ray + sign(ray) * 0.0001f;
 			if (hit->x >= size || hit->y >= size || hit->z >= size || hit->x <= 0.0f || hit->y <= 0.0f || hit->z <= 0.0f) { return false; }
 			
 			base = (float3){ 0.0f, 0.0f, 0.0f };
@@ -117,7 +117,7 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 				float enter, exit;
 				RayBox(ray, origin, base, base + mid, &enter, &exit);
 				*hit = origin + ray * enter;
-				*hitExit = origin + ray * exit + sign(ray) * size * 0.000001f;
+				*hitExit = origin + ray * exit + sign(ray) * 0.0001f;
 				*tile = blocks[(v.y * sizei + v.z) * sizei + v.x];
 				float2 uv = (float2){ 0.0f, 0.0f };
 				float3 norm = *hit - base;
