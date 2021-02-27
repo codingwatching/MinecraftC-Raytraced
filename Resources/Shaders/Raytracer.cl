@@ -54,8 +54,8 @@ int GetTextureID(uchar tile, int side)
 
 float GetTileReflectiveness(uchar tile)
 {
-	if (tile == BlockTypeGlass) { return 0.0; }
-	if (tile == BlockTypeWater || tile == BlockTypeStillWater) { return 0.25; }
+	if (tile == BlockTypeGlass) { return 0.0f; }
+	if (tile == BlockTypeWater || tile == BlockTypeStillWater) { return 0.25f; }
 	return 0.0;
 }
 
@@ -68,7 +68,7 @@ float3 BGColor(float3 ray)
 bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int treeDepth, float3 * hit, float3 * hitExit, uchar * tile, float3 * normal, float4 * color)
 {
 	*tile = 0;
-	float size = pow(2.0, (float)treeDepth);
+	float size = pow(2.0f, (float)treeDepth);
 	int sizei = 1;
 	for (int i = 0; i < treeDepth; i++) { sizei *= 2; }
 	float dist;
@@ -142,7 +142,7 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 					level = 0;
 					continue;
 				}
-				if (id == -1) { *color = (float4){ 1.0, 0.0, 1.0, 1.0 }; }
+				if (id == -1) { *color = (float4){ 1.0f, 0.0f, 1.0f, 1.0f }; }
 				*normal = BoxNormal(*hit, base, base + mid);
 				return true;
 			}
@@ -167,9 +167,9 @@ float3 TraceLighting(float3 color, float3 lightDir, float3 normal)
 
 float3 TraceShadows(float3 color, float3 lightDir, __global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 hit, int treeDepth)
 {
-	float4 shadowColor = { 0.0, 0.0, 0.0, 1.0 };
-	float4 hitColor = { 0.0, 0.0, 0.0, 0.0 };
-	float3 exit = hit + 0.001 * lightDir;
+	float4 shadowColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+	float4 hitColor = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float3 exit = hit + 0.001f * lightDir;
 	float3 shadowHit, normal;
 	uchar tile = 0;
 	bool inWater = false;
@@ -184,7 +184,7 @@ float3 TraceShadows(float3 color, float3 lightDir, __global uchar * octree, __gl
 				else { shadowColor.w *= (1.0f - min(distance(shadowHit, waterEntry) / 10.0f, 1.0f)); }
 			}
 			shadowColor.xyz += hitColor.xyz * hitColor.w * shadowColor.w;
-			shadowColor.w *= 1.0 - hitColor.w;
+			shadowColor.w *= 1.0f - hitColor.w;
 			if (!inWater && (tile == BlockTypeWater || tile == BlockTypeStillWater))
 			{
 				inWater = true;
@@ -193,7 +193,7 @@ float3 TraceShadows(float3 color, float3 lightDir, __global uchar * octree, __gl
 		}
 		else { break; }
 	}
-	return color * shadowColor.w + (shadowColor.xyz * shadowColor.w + 0.5 * color * (1.0 - shadowColor.w)) * (1.0 - shadowColor.w);
+	return color * shadowColor.w + (shadowColor.xyz * shadowColor.w + 0.5f * color * (1.0f - shadowColor.w)) * (1.0f - shadowColor.w);
 }
 
 float3 TraceFog(float3 color, float3 hit, float3 origin, float3 ray)
@@ -204,15 +204,15 @@ float3 TraceFog(float3 color, float3 hit, float3 origin, float3 ray)
 
 float3 TraceReflections(float3 color, float reflectiveness, float3 normal, __global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 hit, int treeDepth, float3 ray, float3 lightDir)
 {
-	float4 reflectionColor = { 0.0, 0.0, 0.0, 1.0 };
-	float4 hitColor = { 0.0, 0.0, 0.0, 0.0 };
+	float4 reflectionColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+	float4 hitColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 	float3 rRay = normalize(ray - 2.0f * dot(ray, normal) * normal);
-	float3 exit = hit + 0.001 * rRay;
+	float3 exit = hit + 0.001f * rRay;
 	float3 rHit, rNormal;
 	uchar tile = 0;
 	bool inWater = false;
 	float3 waterEntry = hit;
-	while (hitColor.w < 1.0)
+	while (hitColor.w < 1.0f)
 	{
 		if (RayTreeIntersection(octree, blocks, terrain, rRay, exit, treeDepth, &rHit, &exit, &tile, &rNormal, &hitColor))
 		{
@@ -224,7 +224,7 @@ float3 TraceReflections(float3 color, float reflectiveness, float3 normal, __glo
 			hitColor.xyz = TraceLighting(hitColor.xyz, lightDir, rNormal);
 			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, octree, blocks, terrain, rHit, treeDepth);
 			reflectionColor.xyz += hitColor.xyz * hitColor.w * reflectionColor.w;
-			reflectionColor.w *= 1.0 - hitColor.w;
+			reflectionColor.w *= 1.0f - hitColor.w;
 			if (!inWater && (tile == BlockTypeWater || tile == BlockTypeStillWater))
 			{
 				inWater = true;
@@ -239,7 +239,7 @@ float3 TraceReflections(float3 color, float reflectiveness, float3 normal, __glo
 		}
 	}
 	reflectionColor.xyz = TraceFog(reflectionColor.xyz, rHit, hit, rRay);
-	return reflectionColor.xyz * reflectiveness + color * (1.0 - reflectiveness);
+	return reflectionColor.xyz * reflectiveness + color * (1.0f - reflectiveness);
 }
 
 __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * blocks, __write_only image2d_t texture, int width, int height, float16 camera, __read_only image2d_t terrain)
@@ -257,14 +257,14 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 	float4 finalColor = { BGColor(ray), 1.0f };
 	float3 lightDir = normalize((float3){ 1.0f, 1.0f, 0.5f });
 	
-	float4 fragColor = { 0.0, 0.0, 0.0, 1.0 };
-	float4 hitColor = { 0.0, 0.0, 0.0, 0.0 };
+	float4 fragColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+	float4 hitColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 	float3 exit = origin;
 	float3 hit, normal;
 	uchar tile = 0;
 	bool inWater = false;
 	float3 waterEntry = origin;
-	while (hitColor.w < 1.0)
+	while (hitColor.w < 1.0f)
 	{
 		if (RayTreeIntersection(octree, blocks, terrain, ray, exit, treeDepth, &hit, &exit, &tile, &normal, &hitColor))
 		{
@@ -276,9 +276,9 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 			hitColor.xyz = TraceLighting(hitColor.xyz, lightDir, normal);
 			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, octree, blocks, terrain, hit, treeDepth);
 			float reflectiveness = GetTileReflectiveness(tile);
-			if (reflectiveness > 0.0) { hitColor.xyz = TraceReflections(hitColor.xyz, reflectiveness, normal, octree, blocks, terrain, hit, treeDepth, ray, lightDir); }
+			if (reflectiveness > 0.0f) { hitColor.xyz = TraceReflections(hitColor.xyz, reflectiveness, normal, octree, blocks, terrain, hit, treeDepth, ray, lightDir); }
 			fragColor.xyz += hitColor.xyz * hitColor.w * fragColor.w;
-			fragColor.w *= 1.0 - hitColor.w;
+			fragColor.w *= 1.0f - hitColor.w;
 			if (!inWater && (tile == BlockTypeWater || tile == BlockTypeStillWater))
 			{
 				inWater = true;

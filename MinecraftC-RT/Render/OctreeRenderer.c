@@ -90,17 +90,33 @@ void OctreeRendererInitialize(TextureManager textures, int width, int height)
 
 void OctreeRendererResize(int width, int height)
 {
-	OctreeRendererDeinitialize();
-	OctreeRendererInitialize(OctreeRenderer.TextureManager, width, height);
-	OctreeRendererSetOctree(OctreeRenderer.Octree);
+	clReleaseMemObject(OctreeRenderer.OutputTexture);
+	glDeleteTextures(1, &OctreeRenderer.TextureID);
+	OctreeRenderer.Width = width;
+	OctreeRenderer.Height = height;
+	glGenTextures(1, &OctreeRenderer.TextureID);
+	glBindTexture(GL_TEXTURE_2D, OctreeRenderer.TextureID);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	int error;
+	OctreeRenderer.OutputTexture = clCreateFromGLTexture(OctreeRenderer.Context, CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, OctreeRenderer.TextureID, &error);
+	if (error < 0) { LogFatal("Failed to create texture buffer: %i\n", error); }
+	error = clSetKernelArg(OctreeRenderer.Kernel, 3, sizeof(cl_mem), &OctreeRenderer.OutputTexture);
+	error |= clSetKernelArg(OctreeRenderer.Kernel, 4, sizeof(int), &OctreeRenderer.Width);
+	error |= clSetKernelArg(OctreeRenderer.Kernel, 5, sizeof(int), &OctreeRenderer.Height);
+	if (error < 0) { LogFatal("Failed to set kernel arguments: %i\n", error); }
 }
 
 void OctreeRendererSetOctree(Octree tree)
 {
 	OctreeRenderer.Octree = tree;
-	clFinish(OctreeRenderer.Queue);
-	if (OctreeRenderer.OctreeBuffer != NULL) { clReleaseMemObject(OctreeRenderer.OctreeBuffer); }
+
 	if (OctreeRenderer.BlockBuffer != NULL) { clReleaseMemObject(OctreeRenderer.BlockBuffer); }
+	if (OctreeRenderer.OctreeBuffer != NULL) { clReleaseMemObject(OctreeRenderer.OctreeBuffer); }
 	
 	int error;
 	OctreeRenderer.OctreeBuffer = clCreateBuffer(OctreeRenderer.Context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, tree->MaskCount, tree->Masks, &error);
@@ -146,5 +162,5 @@ void OctreeRendererDeinitialize()
 	clReleaseProgram(OctreeRenderer.Shader);
 	clReleaseContext(OctreeRenderer.Context);
 	clReleaseDevice(OctreeRenderer.Device);
-	glDeleteTextures(1, &OctreeRenderer.TextureID);
+	OctreeRenderer = (struct OctreeRenderer){ 0 };
 }

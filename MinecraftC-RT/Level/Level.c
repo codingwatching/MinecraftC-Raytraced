@@ -1,6 +1,7 @@
 #include <string.h>
 #include "Level.h"
 #include "../Render/LevelRenderer.h"
+#include "../Render/OctreeRenderer.h"
 #include "../Utilities/Log.h"
 
 Level LevelCreate()
@@ -45,7 +46,7 @@ void LevelSetData(Level level, ProgressBarDisplay display, int w, int d, int h, 
 			for (int z = 0; z < h; z++)
 			{
 				BlockType tile = LevelGetTile(level, x, y, z);
-				if (tile != BlockTypeNone) { OctreeSet(level->Octree, x, y, z, tile); }
+				if (tile != BlockTypeNone) { OctreeSet(level->Octree, x, y, z, tile, false); }
 			}
 		}
 	}
@@ -193,7 +194,16 @@ bool LevelNetSetTileNoNeighborChange(Level level, int x, int y, int z, BlockType
 	{
 		LevelRendererQueueChunks(level->Renderers[j], (int3){ x, y, z } - 1, (int3){ x, y, z } + 1);
 	}
-	OctreeSet(level->Octree, x, y, z, tile);
+	OctreeSet(level->Octree, x, y, z, tile, true);
+	if (OctreeRenderer.BlockBuffer != NULL)
+	{
+		int error;
+		unsigned char * mem = clEnqueueMapBuffer(OctreeRenderer.Queue, OctreeRenderer.BlockBuffer, true, CL_MAP_WRITE, (y * level->Height + z) * level->Width + x, 1, 0, NULL, NULL, &error);
+		if (error < 0) { LogFatal("Failed to write buffer: %i\n", error); }
+		*mem = tile;
+		error = clEnqueueUnmapMemObject(OctreeRenderer.Queue, OctreeRenderer.BlockBuffer, mem, 0, NULL, NULL);
+		if (error < 0) { LogFatal("Failed to write buffer: %i\n", error); }
+	}
 	return true;
 }
 

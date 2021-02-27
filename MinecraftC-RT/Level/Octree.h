@@ -10,6 +10,6 @@ typedef struct Octree
 } * Octree;
 
 Octree OctreeCreate(struct Level * level);
-void OctreeSet(Octree tree, int x, int y, int z, BlockType tile);
+void OctreeSet(Octree tree, int x, int y, int z, BlockType tile, bool updateBuffer);
 BlockType OctreeGet(Octree tree, int x, int y, int z);
 void OctreeDestroy(Octree tree);
