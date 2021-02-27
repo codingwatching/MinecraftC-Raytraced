@@ -987,7 +987,7 @@ void MinecraftSetLevel(Minecraft minecraft, Level level)
 	if (minecraft->Player == NULL)
 	{
 		minecraft->Player = PlayerCreate(level);
-		PlayerResetPosition(minecraft->Player);
+		EntityResetPosition(minecraft->Player);
 		if (level != NULL) { level->Player = minecraft->Player; }
 	}
 	

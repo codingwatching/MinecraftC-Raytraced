@@ -98,7 +98,7 @@ void OctreeRendererResize(int width, int height)
 void OctreeRendererSetOctree(Octree tree)
 {
 	OctreeRenderer.Octree = tree;
-	
+	clFinish(OctreeRenderer.Queue);
 	if (OctreeRenderer.OctreeBuffer != NULL) { clReleaseMemObject(OctreeRenderer.OctreeBuffer); }
 	if (OctreeRenderer.BlockBuffer != NULL) { clReleaseMemObject(OctreeRenderer.BlockBuffer); }
 	
@@ -136,6 +136,7 @@ void OctreeRendererEnqueue(float dt)
 
 void OctreeRendererDeinitialize()
 {
+	clFinish(OctreeRenderer.Queue);
 	clReleaseMemObject(OctreeRenderer.OutputTexture);
 	clReleaseMemObject(OctreeRenderer.OctreeBuffer);
 	clReleaseMemObject(OctreeRenderer.BlockBuffer);

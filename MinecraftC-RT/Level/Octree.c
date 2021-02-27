@@ -20,8 +20,8 @@ void OctreeSet(Octree tree, int x, int y, int z, BlockType tile)
 	int start = 0, offset = 0;
 	int3 base = { 0 };
 	int mid = pow(2, tree->Depth - 1);
-	unsigned char qStack[tree->Depth];
-	int indexStack[tree->Depth];
+	unsigned char qStack[16];
+	int indexStack[16];
 	for (int i = 0; i < tree->Depth; i++)
 	{
 		unsigned char mask = tree->Masks[start + offset];
