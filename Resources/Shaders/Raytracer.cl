@@ -169,7 +169,7 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 						RayBox(ray, origin, *base, *base + mid, &enter, &exit);
 						*hit = origin + ray * enter;
 						if (exit < enter || exit < 0.0f || enter < 0.0f) { intersection = false; }
-						*normal = normalize((float3){ 0.5 * wave * cos(hit->x + hit->z + time), 1.0, 0.5 * wave * cos(hit->x + hit->z + time) });
+						if (hit->y - base->y == 1.0) *normal = normalize((float3){ 0.5 * wave * cos(hit->x + hit->z + time), 1.0, 0.5 * wave * cos(hit->x + hit->z + time) });
 					}
 				}
 				
@@ -327,7 +327,7 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 	if (x >= width || y >= height) { return; }
 	float2 uv = (float2){ 1.0f - 2.0f * (float)x / width, 2.0f * (float)y / height - 1.0f };
 	uv.x *= (float)width / height;
-	if (isUnderWater) { uv.y += sin(uv.x * (10.0 + sin(time)) + time) / (60.0 + 10.0 * sin(time)); };
+	if (isUnderWater) { uv.y += sin(uv.x * (10.0 + sin(time)) + time) / (70.0 + 10.0 * sin(time)); };
 	
 	float fov = 70.0f;
 	float3 origin = MatrixTransformPoint(camera, (float3){ 0.0f, 0.0f, 0.0f });
