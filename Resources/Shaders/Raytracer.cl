@@ -90,6 +90,21 @@ bool ShouldDiscardTransparency(uchar tile)
 	return tile == BlockTypeLeaves || tile == BlockTypeDandelion || tile == BlockTypeRose || tile == BlockTypeRedMushroom || tile == BlockTypeBrownMushroom;
 }
 
+bool TileSpecificCollision(float3 ray, float3 origin, float3 base, float3 * hit, uchar * tile, float3 * normal)
+{
+	if (*tile == BlockTypeWater || *tile == BlockTypeStillWater)
+	{
+		float enter, exit;
+		RayBox(ray, origin, base, base + (float3){ 1.0f, 0.9f, 1.0f }, &enter, &exit);
+		
+		if (exit < enter || exit < 0.0f || enter < 0.0f) { return false; }
+		*hit = origin + ray * enter;
+		*normal = BoxNormal(*hit, base, base + (float3){ 1.0f, 0.9f, 1.0f });
+		return true;
+	}
+	return true;
+}
+
 float3 BGColor(float3 ray)
 {
 	float t = 1.0f - (1.0f - ray.y) * (1.0f - ray.y);
@@ -102,7 +117,7 @@ float4 WaterColor(float3 hit, __read_only image2d_t terrain)
 	return read_imagef(terrain, TerrainSampler, uv);
 }
 
-bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int treeDepth, bool ignoreWater, float3 * hit, float3 * hitExit, uchar * tile, float3 * normal, float4 * color)
+bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int treeDepth, bool ignoreWater, float3 * base, float3 * hit, float3 * hitExit, uchar * tile, float3 * normal, float4 * color)
 {
 	*tile = 0;
 	float size = pow(2.0f, (float)treeDepth);
@@ -117,7 +132,7 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 	
 	*hit = origin + fmax(dist, 0.0f) * ray;
 	*color = (float4){ 0.0f, 0.0f, 0.0f, 0.0f };
-	float3 base = { 0.0f, 0.0f, 0.0f };
+	*base = (float3){ 0.0f, 0.0f, 0.0f };
 	float mid = size / 2.0f;
 	int level = 0;
 	int offset = 0;
@@ -125,18 +140,18 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 	while (level < treeDepth)
 	{
 		uchar mask = octree[(index - 1) / 7 + offset];
-		uint q = (hit->x > base.x + mid) + 2 * (hit->y > base.y + mid) + 4 * (hit->z > base.z + mid);
-		base += mid * convert_float3(((uint3){ q, q, q } >> (uint3){ 0, 1, 2 }) & 1);
+		uint q = (hit->x > base->x + mid) + 2 * (hit->y > base->y + mid) + 4 * (hit->z > base->z + mid);
+		*base += mid * convert_float3(((uint3){ q, q, q } >> (uint3){ 0, 1, 2 }) & 1);
 		
 		if (((mask >> q) & 1) == 0)
 		{
 			float enter, exit;
-			RayBox(ray, *hit, base, base + mid, &enter, &exit);
+			RayBox(ray, *hit, *base, *base + mid, &enter, &exit);
 			//if (exit - enter < 0.004f * distance(*hit, origin)) { *tile = 255; break; }
 			*hit += exit * ray + sign(ray) * 0.0001f;
 			if (hit->x >= size || hit->y >= size || hit->z >= size || hit->x <= 0.0f || hit->y <= 0.0f || hit->z <= 0.0f) { return false; }
 			
-			base = (float3){ 0.0f, 0.0f, 0.0f };
+			*base = (float3){ 0.0f, 0.0f, 0.0f };
 			mid = size / 2.0f;
 			offset = 0;
 			index = 1;
@@ -148,31 +163,45 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 
 		if (level == treeDepth - 1)
 		{
-			int3 v = convert_int3(base);
+			int3 v = convert_int3(*base);
 			if (v.x >= 0 && v.y >= 0 && v.z >= 0 && v.x < sizei && v.y < 64 && v.z < sizei)
 			{
 				float enter, exit;
-				RayBox(ray, origin, base, base + mid, &enter, &exit);
+				RayBox(ray, origin, *base, *base + mid, &enter, &exit);
 				*hit = origin + ray * enter;
 				*hitExit = origin + ray * exit + sign(ray) * 0.0001f;
 				*tile = blocks[(v.y * sizei + v.z) * sizei + v.x];
+				
+				bool intersection = true;
+				if (*tile == BlockTypeWater || *tile == BlockTypeStillWater)
+				{
+					uchar above = blocks[((v.y + 1) * sizei + v.z) * sizei + v.x];
+					if (above != BlockTypeWater && above != BlockTypeStillWater)
+					{
+						*base -= (float3){ 0.0f, 0.1f, 0.0f };
+						RayBox(ray, origin, *base, *base + mid, &enter, &exit);
+						*hit = origin + ray * enter;
+						if (exit < enter || exit < 0.0f || enter < 0.0f) { intersection = false; }
+					}
+				}
+				
 				float2 uv = (float2){ 0.0f, 0.0f };
-				float3 norm = *hit - base;
+				float3 norm = *hit - *base;
 				int side = 0;
-				if (norm.x == 0.0f) { uv = (float2){ norm.z, 1.0f - norm.y }; side = 5; }
-				if (norm.x == 1.0f) { uv = (float2){ 1.0f - norm.z, 1.0 - norm.y }; side = 4; }
-				if (norm.y == 0.0f) { uv = norm.xz; side = 0; }
-				if (norm.y == 1.0f) { uv = norm.xz; side = 1; }
-				if (norm.z == 0.0f) { uv = (float2){ 1.0f - norm.x, 1.0f - norm.y }; side = 3; }
-				if (norm.z == 1.0f) { uv = (float2){ norm.x, 1.0f - norm.y }; side = 2; }
+				if (norm.x == 0.0f) { uv = (float2){ norm.z, 1.0f - norm.y }; side = 5; *normal = (float3){ 0.0f, 0.0f, 1.0f }; }
+				if (norm.x == 1.0f) { uv = (float2){ 1.0f - norm.z, 1.0 - norm.y }; side = 4; *normal = (float3){ 0.0f, 0.0f, -1.0f }; }
+				if (norm.y == 0.0f) { uv = norm.xz; side = 0; *normal = (float3){ 0.0f, -1.0f, 0.0f }; }
+				if (norm.y == 1.0f) { uv = norm.xz; side = 1; *normal = (float3){ 0.0f, 1.0f, 0.0f }; }
+				if (norm.z == 0.0f) { uv = (float2){ 1.0f - norm.x, 1.0f - norm.y }; side = 3; *normal = (float3){ 1.0f, 0.0f, 0.0f }; }
+				if (norm.z == 1.0f) { uv = (float2){ norm.x, 1.0f - norm.y }; side = 2; *normal = (float3){ -1.0f, 0.0f, 0.0f }; }
 				int id = GetTextureID(*tile, side);
 				uv = uv / 16.0f + (float2){ (float)((id % 16) << 4), (float)((id / 16) << 4) } / 256.0f;
 				*color = read_imagef(terrain, TerrainSampler, uv);
-				if (id == -2 || (ShouldDiscardTransparency(*tile) && color->w == 0.0) || ((*tile == BlockTypeWater || *tile == BlockTypeStillWater) && ignoreWater))
+				if (!intersection || id == -2 || (ShouldDiscardTransparency(*tile) && color->w == 0.0) || ((*tile == BlockTypeWater || *tile == BlockTypeStillWater) && ignoreWater))
 				{
 					*hit = *hitExit;
 					if (hit->x >= size || hit->y >= size || hit->z >= size || hit->x <= 0.0f || hit->y <= 0.0f || hit->z <= 0.0f) { return false; }
-					base = (float3){ 0.0f, 0.0f, 0.0f };
+					*base = (float3){ 0.0f, 0.0f, 0.0f };
 					mid = size / 2.0f;
 					offset = 0;
 					index = 1;
@@ -180,7 +209,7 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 					continue;
 				}
 				if (id == -1) { *color = (float4){ 1.0f, 0.0f, 1.0f, 1.0f }; }
-				*normal = BoxNormal(*hit, base, base + mid);
+				*normal = BoxNormal(*hit, *base, *base + mid);
 				return true;
 			}
 			else
@@ -197,9 +226,9 @@ bool RayTreeIntersection(__global uchar * octree, __global uchar * blocks, __rea
 	return false;
 }
 
-bool RaySceneIntersection(__global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int treeDepth, bool ignoreWater, float3 * hit, float3 * hitExit, uchar * tile, float3 * normal, float4 * color)
+bool RaySceneIntersection(__global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int treeDepth, bool ignoreWater, float3 * base, float3 * hit, float3 * hitExit, uchar * tile, float3 * normal, float4 * color)
 {
-	if (!RayTreeIntersection(octree, blocks, terrain, ray, origin, treeDepth, ignoreWater, hit, hitExit, tile, normal, color))
+	if (!RayTreeIntersection(octree, blocks, terrain, ray, origin, treeDepth, ignoreWater, base, hit, hitExit, tile, normal, color))
 	{
 		if (RayPlaneIntersection(ray, origin, 32.0f, hit))
 		{
@@ -219,7 +248,11 @@ bool RaySceneIntersection(__global uchar * octree, __global uchar * blocks, __re
 		}
 		else { return false; }
 	}
-	else { return true; }
+	else
+	{
+		//if (!TileSpecificCollision(ray, origin, *base, hit, tile, normal)) { color->w = 0.0f; }
+		return true;
+	}
 }
 
 float3 TraceLighting(float3 color, float3 lightDir, float3 normal)
@@ -227,18 +260,17 @@ float3 TraceLighting(float3 color, float3 lightDir, float3 normal)
 	return color * (max(dot(lightDir, normal), -1.0f) * 0.25f + 0.75f);
 }
 
-float3 TraceShadows(float3 color, float3 lightDir, __global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 hit, int treeDepth)
+float3 TraceShadows(float3 color, float3 lightDir, __global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 hit, int treeDepth, bool inWater, float3 waterEntry)
 {
 	float4 shadowColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 	float4 hitColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 	float3 exit = hit + 0.001f * lightDir;
-	float3 shadowHit, normal;
+	float3 shadowHit;
 	uchar tile = 0;
-	bool inWater = false;
-	float3 waterEntry = hit;
+	waterEntry = inWater ? waterEntry : hit;
 	while (hitColor.w < 1.0)
 	{
-		if (RaySceneIntersection(octree, blocks, terrain, lightDir, exit, treeDepth, inWater, &shadowHit, &exit, &tile, &normal, &hitColor))
+		if (RaySceneIntersection(octree, blocks, terrain, lightDir, exit, treeDepth, inWater, &(float3){ 0.0f, 0.0f, 0.0f }, &shadowHit, &exit, &tile, &(float3){ 0.0f, 0.0f, 0.0f }, &hitColor))
 		{
 			if (inWater)
 			{
@@ -277,7 +309,7 @@ float3 TraceReflections(float3 color, float reflectiveness, float3 normal, __glo
 	float3 waterEntry = hit;
 	while (hitColor.w < 1.0f)
 	{
-		if (RaySceneIntersection(octree, blocks, terrain, rRay, exit, treeDepth, inWater, &rHit, &exit, &tile, &rNormal, &hitColor))
+		if (RaySceneIntersection(octree, blocks, terrain, rRay, exit, treeDepth, inWater, &(float3){ 0.0f, 0.0f, 0.0f }, &rHit, &exit, &tile, &rNormal, &hitColor))
 		{
 			if (inWater)
 			{
@@ -285,7 +317,7 @@ float3 TraceReflections(float3 color, float reflectiveness, float3 normal, __glo
 				else { reflectionColor.w *= (1.0f - min(distance(rHit, waterEntry) / 10.0f, 1.0f)); }
 			}
 			hitColor.xyz = TraceLighting(hitColor.xyz, lightDir, rNormal);
-			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, octree, blocks, terrain, rHit, treeDepth);
+			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, octree, blocks, terrain, rHit, treeDepth, inWater, waterEntry);
 			reflectionColor.xyz += hitColor.xyz * hitColor.w * reflectionColor.w;
 			reflectionColor.w *= 1.0f - hitColor.w;
 			if (!inWater && (tile == BlockTypeWater || tile == BlockTypeStillWater))
@@ -329,13 +361,13 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 	}
 	float4 hitColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 	float3 exit = origin;
-	float3 hit, normal;
+	float3 hit, normal, base;
 	uchar tile = 0;
 	bool inWater = isUnderWater;
 	float3 waterEntry = origin;
 	while (hitColor.w < 1.0f)
 	{
-		if (RaySceneIntersection(octree, blocks, terrain, ray, exit, treeDepth, inWater, &hit, &exit, &tile, &normal, &hitColor))
+		if (RaySceneIntersection(octree, blocks, terrain, ray, exit, treeDepth, inWater, &base, &hit, &exit, &tile, &normal, &hitColor))
 		{
 			if (inWater)
 			{
@@ -343,7 +375,7 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 				else { fragColor.w *= (1.0f - min(distance(hit, waterEntry) / 10.0f, 1.0f)); }
 			}
 			hitColor.xyz = TraceLighting(hitColor.xyz, lightDir, normal);
-			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, octree, blocks, terrain, hit, treeDepth);
+			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, octree, blocks, terrain, hit, treeDepth, inWater, waterEntry);
 			float reflectiveness = GetTileReflectiveness(tile);
 			if (reflectiveness > 0.0f) { hitColor.xyz = TraceReflections(hitColor.xyz, reflectiveness, normal, octree, blocks, terrain, hit, treeDepth, ray, lightDir); }
 			fragColor.xyz += hitColor.xyz * hitColor.w * fragColor.w;
