@@ -52,7 +52,7 @@ bool RayBoxIntersection(float3 r, float3 o, float3 bmin, float3 bmax, float * di
 
 bool RayPlaneIntersection(float3 ray, float3 origin, float height, float3 * hit)
 {
-	if (fabs(ray.y) > 0.0001f)
+	if (fabs(ray.y) != 0.0f)
 	{
 		float t = (height - origin.y) / ray.y;
 		*hit = origin + ray * t;
@@ -305,13 +305,14 @@ float3 TraceReflections(float3 color, float reflectiveness, float3 normal, __glo
 	return reflectionColor.xyz * reflectiveness + color * (1.0f - reflectiveness);
 }
 
-__kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * blocks, __write_only image2d_t texture, int width, int height, float16 camera, __read_only image2d_t terrain)
+__kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * blocks, __write_only image2d_t texture, int width, int height, float16 camera, __read_only image2d_t terrain, int isUnderWater, float time)
 {
 	int x = get_global_id(0);
 	int y = get_global_id(1);
 	if (x >= width || y >= height) { return; }
 	float2 uv = (float2){ 1.0f - 2.0f * (float)x / width, 2.0f * (float)y / height - 1.0f };
 	uv.x *= (float)width / height;
+	if (isUnderWater) { uv.y += sin(uv.x * (10.0 + sin(time)) + time) / (60.0 + 10.0 * sin(time)); };
 	
 	float fov = 70.0f;
 	float3 origin = MatrixTransformPoint(camera, (float3){ 0.0f, 0.0f, 0.0f });
@@ -319,11 +320,18 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 	
 	float3 lightDir = normalize((float3){ 1.0f, 1.0f, 0.5f });
 	float4 fragColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+	if (isUnderWater)
+	{
+		float4 water = read_imagef(terrain, TerrainSampler, (float2){ x / (float)width, y / (float)height } / 16.0f + (float2){ 224.0f / 256.0f, 0.0f });
+		water.w *= 0.375f;
+		fragColor.xyz += water.xyz * water.w * fragColor.w;;
+		fragColor.w *= 1.0 - water.w;
+	}
 	float4 hitColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 	float3 exit = origin;
 	float3 hit, normal;
 	uchar tile = 0;
-	bool inWater = false;
+	bool inWater = isUnderWater;
 	float3 waterEntry = origin;
 	while (hitColor.w < 1.0f)
 	{

@@ -130,7 +130,7 @@ void OctreeRendererSetOctree(Octree tree)
 	if (error < 0) { LogFatal("Failed to set kernel arguments: %i\n", error); }
 }
 
-void OctreeRendererEnqueue(float dt)
+void OctreeRendererEnqueue(float dt, float time)
 {
 	glFinish();
 	Player player = OctreeRenderer.Octree->Level->Player;
@@ -138,6 +138,8 @@ void OctreeRendererEnqueue(float dt)
 	float2 rot = player->OldRotation + (player->Rotation - player->OldRotation) * dt;
 	Matrix4x4 camera = Matrix4x4Multiply(Matrix4x4FromTranslate(pos), Matrix4x4FromEulerAngles((float3){ 180.0 - rot.y, rot.x, 0.0 } * rad));
 	int error = clSetKernelArg(OctreeRenderer.Kernel, 6, sizeof(Matrix4x4), &camera);
+	error |= clSetKernelArg(OctreeRenderer.Kernel, 8, sizeof(int), &(int){ EntityIsUnderWater(player) });
+	error |= clSetKernelArg(OctreeRenderer.Kernel, 9, sizeof(float), &time);
 	if (error < 0) { LogFatal("Failed to set kernel argument: %i\n", error); }
 	error = clEnqueueAcquireGLObjects(OctreeRenderer.Queue, 2, (cl_mem[]){ OctreeRenderer.OutputTexture, OctreeRenderer.TerrainTexture }, 0, NULL, NULL);
 	if (error < 0) { LogFatal("Failed to aquire gl texture: %i\n"); }
