@@ -22,5 +22,5 @@ struct OctreeRenderer
 void OctreeRendererInitialize(TextureManager textures, int width, int height);
 void OctreeRendererResize(int width, int height);
 void OctreeRendererSetOctree(Octree tree);
-void OctreeRendererEnqueue(float dt, float fps);
+void OctreeRendererEnqueue(float dt, float time, bool doBobbing);
 void OctreeRendererDeinitialize(void);

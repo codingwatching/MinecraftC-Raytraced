@@ -130,13 +130,28 @@ void OctreeRendererSetOctree(Octree tree)
 	if (error < 0) { LogFatal("Failed to set kernel arguments: %i\n", error); }
 }
 
-void OctreeRendererEnqueue(float dt, float time)
+void OctreeRendererEnqueue(float dt, float time, bool doBobbing)
 {
-	glFinish();
 	Player player = OctreeRenderer.Octree->Level->Player;
+	PlayerData playerData = player->TypeData;
 	float3 pos = player->OldPosition + (player->Position - player->OldPosition) * dt;
 	float2 rot = player->OldRotation + (player->Rotation - player->OldRotation) * dt;
 	Matrix4x4 camera = Matrix4x4Multiply(Matrix4x4FromTranslate(pos), Matrix4x4FromEulerAngles((float3){ 180.0 - rot.y, rot.x, 0.0 } * rad));
+	if (doBobbing)
+	{
+		float walk = player->WalkDistance - player->OldWalkDistance;
+		walk = player->WalkDistance + walk * dt;
+		float bob = (playerData->OldBobbing + (playerData->Bobbing - playerData->OldBobbing) * dt) * rad;
+		float tilt = (playerData->OldTilt + (playerData->Tilt - playerData->OldTilt) * dt) * rad;
+		Matrix4x4 bobbing = Matrix4x4Identity;
+		bobbing = Matrix4x4Multiply(Matrix4x4FromAxisAngle(forward3f, -sin(walk * pi) * bob * 3.0), bobbing);
+		bobbing = Matrix4x4Multiply(Matrix4x4FromAxisAngle(right3f, -fabs(cos(walk * pi + 0.2) * bob) * 5.0), bobbing);
+		bobbing = Matrix4x4Multiply(Matrix4x4FromAxisAngle(right3f, -tilt), bobbing);
+		bobbing = Matrix4x4Multiply(Matrix4x4FromTranslate((float3){ -sin(walk * pi) * bob * 0.5, fabs(cos(walk * pi) * bob), 0.0 }), bobbing);
+		camera = Matrix4x4Multiply(camera, bobbing);
+	}
+	
+	glFinish();
 	int error = clSetKernelArg(OctreeRenderer.Kernel, 6, sizeof(Matrix4x4), &camera);
 	error |= clSetKernelArg(OctreeRenderer.Kernel, 8, sizeof(int), &(int){ EntityIsUnderWater(player) });
 	error |= clSetKernelArg(OctreeRenderer.Kernel, 9, sizeof(float), &time);

@@ -883,7 +883,7 @@ void MinecraftRun(Minecraft minecraft)
 					
 					if (!minecraft->Settings->Anaglyph) { break; }
 				}
-				OctreeRendererEnqueue(delta, timer->LastHR);
+				OctreeRendererEnqueue(delta, timer->LastHR, minecraft->Settings->ViewBobbing);
 				glMatrixMode(GL_PROJECTION);
 				glLoadIdentity();
 				glMatrixMode(GL_MODELVIEW);
