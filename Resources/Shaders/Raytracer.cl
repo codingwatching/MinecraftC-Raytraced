@@ -241,7 +241,7 @@ bool RaySceneIntersection(__global uchar * octree, __global uchar * blocks, __re
 
 float3 TraceLighting(float3 color, float3 lightDir, float3 normal)
 {
-	return color * (max(dot(lightDir, normal), -1.0f) * 0.25f + 0.75f);
+	return color * ((max(dot(lightDir, normal), -1.0f) * 0.4f + 0.6f) * (float3){ 1.0f, 0.95f, 0.8f } + (float3){ 0.2f, 0.2f, 0.1f });
 }
 
 float3 TraceShadows(float3 color, float3 lightDir, __global uchar * octree, __global uchar * blocks, __read_only image2d_t terrain, float3 hit, int treeDepth, bool inWater, float3 waterEntry, float time)
@@ -271,13 +271,13 @@ float3 TraceShadows(float3 color, float3 lightDir, __global uchar * octree, __gl
 		}
 		else { break; }
 	}
-	return color * shadowColor.w + (shadowColor.xyz * shadowColor.w + 0.5f * color * (1.0f - shadowColor.w)) * (1.0f - shadowColor.w);
+	return color * shadowColor.w + (shadowColor.xyz * shadowColor.w + 0.375f * color * (1.0f - shadowColor.w)) * (1.0f - shadowColor.w);
 }
 
 float3 TraceFog(float3 color, float3 hit, float3 origin, float3 ray)
 {
 	float d = distance(hit, origin);
-	float w = d < 512.0f ? clamp(d / 128.0f, 0.0f, 0.6f) : 0.4f * clamp((d - 512.0f) / 1024.0f, 0.0f, 1.0f) + 0.6f;
+	float w = d < 128.0f ? clamp(d / 128.0f, 0.0f, 0.6f) : 0.4f * clamp((d - 128.0f) / 1024.0f, 0.0f, 1.0f) + 0.6f;
 	return color * (1.0f - w) + BGColor(ray) * w;
 }
 
