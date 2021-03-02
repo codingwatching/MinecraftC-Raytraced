@@ -109,6 +109,7 @@ bool PointInBounds(int3 v, int levelSize)
 bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int levelSize, bool ignoreWater, float time, int3 voxel, uchar tile, float3 hitExit, float3 * hit, float3 * normal, float4 * color)
 {
 	float3 base = convert_float3(voxel);
+	float3 dim = (float3){ 1.0f, 1.0f, 1.0f };
 	if (tile == BlockTypeNone) { return false; }
 	else if (tile == BlockTypeWater || tile == BlockTypeStillWater)
 	{
@@ -121,11 +122,20 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 			float freq = 1.0f;
 			base.y -= 0.05f + amp * (sin(freq * (hit->x + hit->z) + time * 1.25f) * 0.5f + 0.5f);
 			float enter, exit;
-			RayBox(ray, origin, base, base + 1.0f, &enter, &exit);
+			RayBox(ray, origin, base, base + dim, &enter, &exit);
 			*hit = origin + ray * enter;
 			if (exit < enter || exit < 0.0f || enter < 0.0f) { return false; }
-			if (hit->y - base.y == 1.0f) { *normal = normalize((float3){ 0.5f * amp * freq * cos((hit->x + hit->z) * freq + time), 1.0f, 0.5f * amp * freq * cos((hit->x + hit->z) * freq + time) }); }
+			if (hit->y - base.y == dim.y) { *normal = normalize((float3){ 0.5f * amp * freq * cos((hit->x + hit->z) * freq + time), 1.0f, 0.5f * amp * freq * cos((hit->x + hit->z) * freq + time) }); }
 		}
+	}
+	else if (tile == BlockTypeSlab)
+	{
+		dim.y = 0.5f;
+		float enter, exit;
+		RayBox(ray, origin, base, base + dim, &enter, &exit);
+		*hit = origin + ray * enter;
+		if (!((exit > enter && enter > 0.0f) || (exit > 0.0f && enter < 0.0f))) { return false; }
+		*normal = BoxNormal(*hit, base, base + dim);
 	}
 	else if (HasCrossPlaneCollision(tile))
 	{
@@ -143,11 +153,11 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 	float3 n = *hit - base;
 	int side = 0;
 	if (n.x == 0.0f) { uv = (float2){ n.z, 1.0f - n.y }; side = 5; }
-	if (n.x == 1.0f) { uv = (float2){ 1.0f - n.z, 1.0 - n.y }; side = 4; }
+	if (n.x == dim.x) { uv = (float2){ 1.0f - n.z, 1.0 - n.y }; side = 4; }
 	if (n.y == 0.0f) { uv = n.xz; side = 0; }
-	if (n.y == 1.0f) { uv = n.xz; side = 1; }
+	if (n.y == dim.y) { uv = n.xz; side = 1; }
 	if (n.z == 0.0f) { uv = (float2){ 1.0f - n.x, 1.0f - n.y }; side = 3; }
-	if (n.z == 1.0f) { uv = (float2){ n.x, 1.0f - n.y }; side = 2; }
+	if (n.z == dim.z) { uv = (float2){ n.x, 1.0f - n.y }; side = 2; }
 	int id = GetTextureID(tile, side);
 	if (id == -1) { *color = (float4){ 1.0f, 0.0f, 1.0f, 1.0f }; return true; }
 	if (id == -2) { return false; }
