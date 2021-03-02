@@ -43,14 +43,6 @@ void RayBox(float3 r, float3 o, float3 bmin, float3 bmax, float * enter, float *
 	*exit = fmin(tf.x, fmin(tf.y, tf.z));
 }
 
-bool RayBoxIntersection(float3 r, float3 o, float3 bmin, float3 bmax, float * dist)
-{
-	float n, f;
-	RayBox(r, o, bmin, bmax, &n, &f);
-	*dist = n;
-	return f > n && f > 0.0f;
-}
-
 bool RayPlaneIntersection(float3 ray, float3 origin, float3 normal, float3 center, float3 * hit)
 {
 	float d = dot(normal, ray);
@@ -80,9 +72,9 @@ int GetTextureID(uchar tile, int side)
 	return TextureIDTable[tile] - 1;
 }
 
-float GetTileReflectiveness(uchar tile)
+float GetTileReflectiveness(uchar tile, float4 color)
 {
-	if (tile == BlockTypeGlass) { return 0.0f; }
+	if (tile == BlockTypeGlass && color.w == 0.0f) { return 0.25f; }
 	if (tile == BlockTypeWater || tile == BlockTypeStillWater) { return 0.25f; }
 	return 0.0f;
 }
@@ -249,14 +241,14 @@ float3 TraceShadows(float3 color, float3 lightDir, __global uchar * blocks, __re
 	return color * shadowColor.w + (shadowColor.xyz * shadowColor.w + 0.375f * color * (1.0f - shadowColor.w)) * (1.0f - shadowColor.w);
 }
 
-float3 TraceFog(float3 color, float3 hit, float3 origin, float3 ray)
+float4 TraceFog(float3 hit, float3 origin, float3 ray)
 {
 	float d = distance(hit, origin);
 	float w = d < 128.0f ? clamp(d / 128.0f, 0.0f, 0.6f) : 0.4f * clamp((d - 128.0f) / 1024.0f, 0.0f, 1.0f) + 0.6f;
-	return color * (1.0f - w) + BGColor(ray) * w;
+	return (float4){ BGColor(ray), w };
 }
 
-float3 TraceReflections(float3 color, float reflectiveness, float3 normal, __global uchar * blocks, __read_only image2d_t terrain, float3 hit, int levelSize, float3 ray, float3 lightDir, float time)
+float3 TraceReflections(float3 normal, __global uchar * blocks, __read_only image2d_t terrain, float3 hit, int levelSize, float3 ray, float3 lightDir, float time)
 {
 	float4 reflectionColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 	float4 hitColor = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -278,6 +270,9 @@ float3 TraceReflections(float3 color, float reflectiveness, float3 normal, __glo
 			}
 			hitColor.xyz = TraceLighting(hitColor.xyz, lightDir, rNormal);
 			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, blocks, terrain, rHit, levelSize, inWater, waterEntry, time);
+			float4 fog = TraceFog(rHit, hit, rRay);
+			reflectionColor.xyz += fog.xyz * fog.w * reflectionColor.w;
+			reflectionColor.w *= 1.0f - fog.w;
 			reflectionColor.xyz += hitColor.xyz * hitColor.w * reflectionColor.w;
 			reflectionColor.w *= 1.0f - hitColor.w;
 			if (!inWater && (tile == BlockTypeWater || tile == BlockTypeStillWater))
@@ -293,8 +288,7 @@ float3 TraceReflections(float3 color, float reflectiveness, float3 normal, __glo
 			break;
 		}
 	}
-	reflectionColor.xyz = TraceFog(reflectionColor.xyz, inWater ? waterEntry : rHit, hit, rRay);
-	return reflectionColor.xyz * reflectiveness + color * (1.0f - reflectiveness);
+	return reflectionColor.xyz;
 }
 
 __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * blocks, __write_only image2d_t texture, int width, int height, float16 camera, __read_only image2d_t terrain, int isUnderWater, float time)
@@ -310,10 +304,6 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 	float3 origin = MatrixTransformPoint(camera, (float3){ 0.0f, 0.0f, 0.0f });
 	float3 ray = normalize(MatrixTransformPoint(camera, (float3){ uv * 0.5f, 0.5f / tanpi(fov / 360.0f) }) - origin);
 	float4 fragColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-	float3 lightDir = normalize((float3){ 1.0f, 1.0f, 0.5f });
-	
-	int levelSize = 1;
-	for (uint i = 0; i < treeDepth; i++) { levelSize *= 2; }
 	
 	if (isUnderWater)
 	{
@@ -323,9 +313,11 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 		fragColor.w *= 1.0f - water.w;
 	}
 	
+	float3 lightDir = normalize((float3){ 1.0f, 1.0f, 0.5f });
+	int levelSize = 1;
+	for (uint i = 0; i < treeDepth; i++) { levelSize *= 2; }
 	float4 hitColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-	float3 exit = origin;
-	float3 hit, normal;
+	float3 exit = origin, hit, normal;
 	int3 voxel;
 	uchar tile = 0;
 	bool inWater = isUnderWater;
@@ -340,12 +332,22 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 				else { fragColor.w *= (1.0f - min(distance(hit, waterEntry) / 10.0f, 1.0f)); }
 			}
 			if ((tile == BlockTypeWater || tile == BlockTypeStillWater) && normal.y > 0.0f) { hit.y += 0.1f; }
+			
 			hitColor.xyz = TraceLighting(hitColor.xyz, lightDir, normal);
 			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, blocks, terrain, hit, levelSize, inWater, waterEntry, time);
-			float reflectiveness = GetTileReflectiveness(tile);
-			if (reflectiveness > 0.0f) { hitColor.xyz = TraceReflections(hitColor.xyz, reflectiveness, normal, blocks, terrain, hit, levelSize, ray, lightDir, time); }
+			float4 fog = TraceFog(hit, origin, ray);
+			fragColor.xyz += fog.xyz * fog.w * fragColor.w;
+			fragColor.w *= 1.0f - fog.w;
+			float reflectiveness = GetTileReflectiveness(tile, hitColor);
+			if (reflectiveness > 0.0f)
+			{
+				float3 rColor = TraceReflections(normal, blocks, terrain, hit, levelSize, ray, lightDir, time);
+				fragColor.xyz += rColor * reflectiveness * fragColor.w;
+				fragColor.w *= 1.0f - reflectiveness;
+			}
 			fragColor.xyz += hitColor.xyz * hitColor.w * fragColor.w;
 			fragColor.w *= 1.0f - hitColor.w;
+			
 			if (!inWater && (tile == BlockTypeWater || tile == BlockTypeStillWater))
 			{
 				inWater = true;
@@ -364,7 +366,6 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 			break;
 		}
 	}
-	fragColor.xyz = TraceFog(fragColor.xyz, inWater ? waterEntry : hit, origin, ray);
 	if (tile == 255) { fragColor.xyz = (float3){ 0.0f, 0.0f, 0.0f }; }
 	write_imagef(texture, (int2){ x, y }, (float4){ fragColor.xyz, 1.0f });
 }
