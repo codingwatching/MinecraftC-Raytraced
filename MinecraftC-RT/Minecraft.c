@@ -520,7 +520,7 @@ void MinecraftRun(Minecraft minecraft)
 				reach = 32.0;
 				v2 = v + (float3){ sc, s2, cc } * reach;
 			
-				bool render = true;
+				bool render = minecraft->Settings->Music;
 				for (int i = 0; i <= 2 && render; i++)
 				{
 					if (i == 2)
@@ -893,7 +893,7 @@ void MinecraftRun(Minecraft minecraft)
 				glEnable(GL_BLEND);
 				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 				glBegin(GL_QUADS);
-				glColor4f(1.0, 1.0, 1.0, 1.0);
+				glColor4f(1.0, 1.0, 1.0, minecraft->Settings->Music ? 0.0 : 1.0);
 				glTexCoord2f(0.0, 0.0);
 				glVertex2f(-1.0, -1.0);
 				glTexCoord2f(1.0, 0.0);
