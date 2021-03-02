@@ -137,6 +137,13 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 		if (!((exit > enter && enter > 0.0f) || (exit > 0.0f && enter < 0.0f))) { return false; }
 		*normal = BoxNormal(*hit, base, base + dim);
 	}
+	else if (tile == BlockTypeGlass)
+	{
+		int3 prevVoxel = convert_int3(*hit - sign(ray) * 0.0001f);
+		uchar prev = blocks[(prevVoxel.y * levelSize + prevVoxel.z) * levelSize + prevVoxel.x];
+		if (prev == BlockTypeGlass) { return false; }
+		*normal = BoxNormal(*hit, base, base + 1.0f);
+	}
 	else if (HasCrossPlaneCollision(tile))
 	{
 		*normal = BoxNormal(*hit, base, base + 1.0f);
