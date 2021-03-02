@@ -168,18 +168,16 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 bool RayWorldIntersection(__global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int levelSize, bool ignoreWater, float time, int3 * voxel, float3 * hit, float3 * hitExit, uchar * tile, float3 * normal, float4 * color)
 {
 	*voxel = convert_int3(origin);
-	*hit = origin;
-	*hitExit = *hit + sign(ray) * 0.0001f;
+	*hitExit = origin;
 	while (PointInBounds(*voxel, levelSize))
 	{
-		*tile = blocks[(voxel->y * levelSize + voxel->z) * levelSize + voxel->x];
 		float enter, exit;
 		RayBox(ray, origin, floor(*hitExit), floor(*hitExit) + 1.0f, &enter, &exit);
+		*hit = origin + ray * enter;
 		*hitExit = origin + ray * exit + sign(ray) * 0.0001f;
 		
+		*tile = blocks[(voxel->y * levelSize + voxel->z) * levelSize + voxel->x];
 		if (RayBlockIntersection(blocks, terrain, ray, origin, levelSize, ignoreWater, time, *voxel, *tile, *hitExit, hit, normal, color)) { return true; }
-		
-		*hit = *hitExit - sign(ray) * 0.0001f;
 		*voxel = convert_int3(*hitExit);
 	}
 	return false;
