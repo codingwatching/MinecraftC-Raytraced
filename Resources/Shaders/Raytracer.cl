@@ -148,6 +148,7 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 {
 	float3 base = convert_float3(voxel);
 	float3 dim = (float3){ 1.0f, 1.0f, 1.0f };
+	float3 initialHit = *hit;
 	if (tile == BlockTypeNone) { return false; }
 	else if (tile == BlockTypeWater || tile == BlockTypeStillWater)
 	{
@@ -259,6 +260,7 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 	uv = uv / 16.0f + (float2){ (float)((id % 16) << 4), (float)((id / 16) << 4) } / 256.0f;
 	*color = read_imagef(terrain, TerrainSampler, uv);
 	if (ShouldDiscardTransparency(tile) && color->w == 0.0f) { return false; }
+	if (tile == BlockTypeWater || tile == BlockTypeStillWater) { *hit = initialHit; }
 	return true;
 }
 
