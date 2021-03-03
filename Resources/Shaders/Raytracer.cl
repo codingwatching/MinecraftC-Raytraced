@@ -17,6 +17,7 @@
 #define BlockTypeSlab 44
 #define BlockTypeTNT 46
 #define BlockTypeBookshelf 47
+#define BlockTypeCloud 50
 #define Epsilon 0.0001f
 
 const sampler_t TerrainSampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_NEAREST;
@@ -58,6 +59,44 @@ bool RayPlaneIntersection(float3 ray, float3 origin, float3 normal, float3 cente
 float3 BoxNormal(float3 hit, float3 bmin, float3 bmax)
 {
 	return normalize(round((hit - (bmin + bmax) / 2.0f) / (fabs(bmin - bmax)) * (1.0f + Epsilon)));
+}
+
+float4 perm(float4 x) { x = ((x * 34.0) + 1.0) * x; return x - floor(x * (1.0 / 289.0)) * 289.0; }
+float noise(float3 p)
+{
+	float3 a = floor(p);
+	float3 d = p - a;
+	d = d * d * (3.0 - 2.0 * d);
+	float4 b = a.xxyy + (float4){ 0.0, 1.0, 0.0, 1.0 };
+	float4 k1 = perm(b.xyxy);
+	float4 k2 = perm(k1.xyxy + b.zzww);
+	float4 c = k2 + a.zzzz;
+	float4 k3 = perm(c);
+	float4 k4 = perm(c + 1.0);
+	float4 _;
+	float4 o1 = fract(k3 * (1.0 / 41.0), &_);
+	float4 o2 = fract(k4 * (1.0 / 41.0), &_);
+	float4 o3 = o2 * d.z + o1 * (1.0 - d.z);
+	float2 o4 = o3.yw * d.x + o3.xz * (1.0 - d.x);
+	return o4.y * d.y + o4.x * (1.0 - d.y);
+}
+
+float CloudSDF(float3 p, float time)
+{
+	p -= time;
+	p /= 64.0f;
+	float n = 0.0;
+	for (int i = 0; i < 5; i++)
+	{
+		n += noise(pow(2.0, (float)i) * p) / pow(2.0, (float)i + 1.0);
+	}
+	return (2.0 * n - 0.75f) * 64.0f;
+}
+
+float3 CloudNormal(float3 p, float time)
+{
+	float2 h = { 0.1f, 0.0f };
+	return normalize((float3){ CloudSDF(p + h.xyy, time) - CloudSDF(p - h.xyy, time), CloudSDF(p + h.yxy, time) - CloudSDF(p - h.yxy, time), CloudSDF(p + h.yyx, time) - CloudSDF(p - h.yyx, time) });
 }
 
 int GetTextureID(uchar tile, int side)
@@ -246,6 +285,27 @@ bool RaySceneIntersection(__global uchar * blocks, __read_only image2d_t terrain
 	if (!RayWorldIntersection(blocks, terrain, ray, origin, levelSize, ignoreWater, time, voxel, hit, hitExit, tile, normal, color))
 	{
 		float dist;
+		float cloudHeight = 128.0f;
+		if (RayPlaneIntersection(ray, *hitExit, (float3){ 0.0f, -1.0f, 0.0f }, (float3){ 0.0f, cloudHeight, 0.0f }, &dist))
+		{
+			*hit = *hitExit + ray * dist;
+			float depth = 0.0f;
+			for (int i = 0; i < 1; i++)
+			{
+				float d = CloudSDF(ray * depth + *hit, time);
+				if (d < Epsilon)
+				{
+					*hit = ray * depth + *hit;
+					*hitExit = *hit;
+					*tile = BlockTypeCloud;
+					*normal = CloudNormal(*hit, time);
+					*color = (float4){ 1.0f, 1.0f, 1.0f, 1.0f };
+					return true;
+				}
+				depth += d;
+			}
+			return false;
+		}
 		if (!ignoreWater && RayPlaneIntersection(ray, *hitExit, (float3){ 0.0f, 1.0f, 0.0f }, (float3){ 0.0f, 31.9f, 0.0f }, &dist))
 		{
 			*hit = *hitExit + ray * dist;
@@ -298,8 +358,9 @@ float3 TraceShadows(float3 color, float3 lightDir, __global uchar * blocks, __re
 				if (tile == BlockTypeWater || tile == BlockTypeStillWater) { continue; }
 				else { shadowColor.w *= (1.0f - min(distance(shadowHit, waterEntry) / 10.0f, 1.0f)); }
 			}
-			shadowColor.xyz += hitColor.xyz * hitColor.w * shadowColor.w;
-			shadowColor.w *= 1.0f - hitColor.w;
+			float w = tile == BlockTypeCloud ? 0.95f : hitColor.w;
+			shadowColor.xyz += hitColor.xyz * w * shadowColor.w;
+			shadowColor.w *= 1.0f - w;
 			if (!inWater && (tile == BlockTypeWater || tile == BlockTypeStillWater))
 			{
 				inWater = true;
@@ -314,7 +375,7 @@ float3 TraceShadows(float3 color, float3 lightDir, __global uchar * blocks, __re
 float4 TraceFog(float3 hit, float3 origin, float3 ray)
 {
 	float d = distance(hit, origin);
-	float w = d < 128.0f ? clamp(d / 128.0f, 0.0f, 0.6f) : 0.5f * clamp((d - 128.0f) / 1024.0f, 0.0f, 1.0f) + 0.6f;
+	float w = d < 1024.0f ? clamp(d / 256.0f, 0.0f, 0.6f) : 0.4f * clamp((d - 1024.0f) / 1024.0f, 0.0f, 1.0f) + 0.6f;
 	return (float4){ BGColor(ray), w };
 }
 
