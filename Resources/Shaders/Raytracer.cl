@@ -265,9 +265,17 @@ bool RaySceneIntersection(__global uchar * blocks, __read_only image2d_t terrain
 	else { return true; }
 }
 
-float3 TraceLighting(float3 color, float3 lightDir, float3 normal)
+float3 TraceLighting(float3 color, float3 lightDir, float3 normal, float3 ray, uchar tile)
 {
-	return color * ((max(dot(lightDir, normal), 0.0f) * 0.5f + 0.5f) * (float3){ 1.0f, 0.95f, 0.8f } + (float3){ 0.25f, 0.25f, 0.25f });
+	float ambientStrength = 0.25f;
+	float specularStrength = 0.1f;
+	int shininess = 4;
+	float3 lightColor = { 1.0f, 1.0f, 1.0f };
+	float3 reflect = normalize(lightDir - 2.0f * dot(lightDir, normal) * normal);
+	float3 ambient = ambientStrength * lightColor;
+	float3 diffuse = (max(dot(normal, lightDir), 0.0) * lightColor * 0.25f + 0.75f);
+	float3 specular = specularStrength * pow(max(dot(ray, reflect), 0.0f), shininess) * lightColor;
+	return (ambient + diffuse + specular) * color;//color * ((max(dot(lightDir, normal), -1.0f) * 0.25f + 0.75f));//* (float3){ 1.0f, 0.95f, 0.8f } + (float3){ 0.25f, 0.25f, 0.25f });
 }
 
 float3 TraceShadows(float3 color, float3 lightDir, __global uchar * blocks, __read_only image2d_t terrain, float3 hit, int levelSize, bool inWater, float3 waterEntry, float time, uchar tile)
@@ -303,7 +311,7 @@ float3 TraceShadows(float3 color, float3 lightDir, __global uchar * blocks, __re
 float4 TraceFog(float3 hit, float3 origin, float3 ray)
 {
 	float d = distance(hit, origin);
-	float w = d < 128.0f ? clamp(d / 128.0f, 0.0f, 0.6f) : 0.4f * clamp((d - 128.0f) / 1024.0f, 0.0f, 1.0f) + 0.6f;
+	float w = d < 128.0f ? clamp(d / 128.0f, 0.0f, 0.5f) : 0.5f * clamp((d - 128.0f) / 1024.0f, 0.0f, 1.0f) + 0.5f;
 	return (float4){ BGColor(ray), w };
 }
 
@@ -327,7 +335,7 @@ float3 TraceReflections(float3 normal, __global uchar * blocks, __read_only imag
 				if (tile == BlockTypeWater || tile == BlockTypeStillWater) { continue; }
 				else { reflectionColor.w *= (1.0f - min(distance(rHit, waterEntry) / 10.0f, 1.0f)); }
 			}
-			hitColor.xyz = TraceLighting(hitColor.xyz, lightDir, rNormal);
+			hitColor.xyz = TraceLighting(hitColor.xyz, lightDir, rNormal, ray, tile);
 			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, blocks, terrain, rHit, levelSize, inWater, waterEntry, time, tile);
 			float4 fog = TraceFog(rHit, hit, rRay);
 			reflectionColor.xyz += fog.xyz * fog.w * reflectionColor.w;
@@ -390,8 +398,7 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 				if (tile == BlockTypeWater || tile == BlockTypeStillWater) { continue; }
 				else { fragColor.w *= (1.0f - min(distance(hit, waterEntry) / 10.0f, 1.0f)); }
 			}
-			
-			hitColor.xyz = TraceLighting(hitColor.xyz, lightDir, normal);
+			hitColor.xyz = TraceLighting(hitColor.xyz, lightDir, normal, ray, tile);
 			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, blocks, terrain, hit, levelSize, inWater, waterEntry, time, tile);
 			float4 fog = TraceFog(hit, origin, ray);
 			fragColor.xyz += fog.xyz * fog.w * fragColor.w;
