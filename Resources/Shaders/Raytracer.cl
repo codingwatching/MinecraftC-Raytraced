@@ -151,6 +151,16 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 		bool p1Intersect = true;
 		RayPlaneIntersection(ray, *hit, normalize((float3){ 1.0f, 0.0f, 1.0f }), base + 0.5f, &p1Dist);
 		if (p1Dist < 0.0f || p1Dist > distance(*hit, hitExit) || distance((*hit + ray * p1Dist).xz, base.xz + 0.5f) > 0.5f) { p1Intersect = false; }
+		
+		float p2Dist;
+		float3 p2Hit, p2Normal;
+		float4 p2Color;
+		bool p2Intersect = true;
+		RayPlaneIntersection(ray, *hit, normalize((float3){ 1.0f, 0.0f, -1.0f }), base + 0.5f, &p2Dist);
+		if (p2Dist < 0.0f || p2Dist > distance(*hit, hitExit) || distance((*hit + ray * p2Dist).xz, base.xz + 0.5f) > 0.5f) { p2Intersect = false; }
+		
+		if (!p1Intersect && !p2Intersect) { return false; }
+		
 		if (p1Intersect)
 		{
 			p1Normal = (float3){ 1.0f, 0.0f, 1.0f } * (1.0f - hit->z + base.z > hit->x - base.x ? -1.0f : 1.0f);
@@ -162,12 +172,6 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 			if (p1Color.w == 0.0f) { p1Intersect = false; }
 		}
 		
-		float p2Dist;
-		float3 p2Hit, p2Normal;
-		float4 p2Color;
-		bool p2Intersect = true;
-		RayPlaneIntersection(ray, *hit, normalize((float3){ 1.0f, 0.0f, -1.0f }), base + 0.5f, &p2Dist);
-		if (p2Dist < 0.0f || p2Dist > distance(*hit, hitExit) || distance((*hit + ray * p2Dist).xz, base.xz + 0.5f) > 0.5f) { p2Intersect = false; }
 		if (p2Intersect)
 		{
 			p2Normal = (float3){ 1.0f, 0.0f, -1.0f } * (hit->z - base.z > hit->x - base.x ? -1.0f : 1.0f);
