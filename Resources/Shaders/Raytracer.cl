@@ -17,6 +17,7 @@
 #define BlockTypeSlab 44
 #define BlockTypeTNT 46
 #define BlockTypeBookshelf 47
+#define Epsilon 0.0001f
 
 const sampler_t TerrainSampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_REPEAT | CLK_FILTER_NEAREST;
 
@@ -43,21 +44,20 @@ void RayBox(float3 r, float3 o, float3 bmin, float3 bmax, float * enter, float *
 	*exit = fmin(tf.x, fmin(tf.y, tf.z));
 }
 
-bool RayPlaneIntersection(float3 ray, float3 origin, float3 normal, float3 center, float3 * hit)
+bool RayPlaneIntersection(float3 ray, float3 origin, float3 normal, float3 center, float * dist)
 {
 	float d = dot(normal, ray);
-	if (fabs(d) != 0.0f)
+	if (fabs(d) > Epsilon)
 	{
-		float t = dot(center - origin, normal) / d;
-		*hit = origin + ray * t;
-		return t >= 0.0f;
+		*dist = dot(center - origin, normal) / d;
+		return *dist >= 0.0f;
 	}
 	return false;
 }
 
 float3 BoxNormal(float3 hit, float3 bmin, float3 bmax)
 {
-	return normalize(round((hit - (bmin + bmax) / 2.0f) / (fabs(bmin - bmax)) * 1.0001f));
+	return normalize(round((hit - (bmin + bmax) / 2.0f) / (fabs(bmin - bmax)) * (1.0f + Epsilon)));
 }
 
 int GetTextureID(uchar tile, int side)
@@ -68,7 +68,6 @@ int GetTextureID(uchar tile, int side)
 	if (tile == BlockTypeBookshelf) { return side <= 1 ? 4 : 35; }
 	if (tile == BlockTypeGold || tile == BlockTypeIron) { return side == 1 ? TextureIDTable[tile] - 17 : (side == 0 ? TextureIDTable[tile] + 15 : TextureIDTable[tile] - 1); }
 	if (tile == BlockTypeTNT) { return side == 0 ? 10 : (side == 1 ? 9 : 8); }
-	if (tile == BlockTypeDandelion || tile == BlockTypeRose || tile == BlockTypeSapling || tile == BlockTypeBrownMushroom || tile == BlockTypeRedMushroom) { return side == 4 ? TextureIDTable[tile] - 1 : -2; }
 	return TextureIDTable[tile] - 1;
 }
 
@@ -106,7 +105,7 @@ bool PointInBounds(int3 v, int levelSize)
 	return v.x >= 0 && v.y >= 0 && v.z >= 0 && v.x < levelSize && v.y < 64 && v.z < levelSize;
 }
 
-bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int levelSize, bool ignoreWater, float time, int3 voxel, uchar tile, float3 hitExit, float3 * hit, float3 * normal, float4 * color)
+bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int levelSize, bool ignoreWater, float time, int3 voxel, uchar tile, float3 * hit, float3 * hitExit, float3 * normal, float4 * color)
 {
 	float3 base = convert_float3(voxel);
 	float3 dim = (float3){ 1.0f, 1.0f, 1.0f };
@@ -125,7 +124,7 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 			RayBox(ray, origin, base, base + dim, &enter, &exit);
 			*hit = origin + ray * enter;
 			if (exit < enter || exit < 0.0f || enter < 0.0f) { return false; }
-			if (hit->y - base.y == dim.y) { *normal = normalize((float3){ 0.5f * amp * freq * cos((hit->x + hit->z) * freq + time), 1.0f, 0.5f * amp * freq * cos((hit->x + hit->z) * freq + time) }); }
+			if (fabs(hit->y - base.y - dim.y) < Epsilon) { *normal = normalize((float3){ 0.5f * amp * freq * cos((hit->x + hit->z) * freq + time), 1.0f, 0.5f * amp * freq * cos((hit->x + hit->z) * freq + time) }); }
 		}
 	}
 	else if (tile == BlockTypeSlab)
@@ -139,17 +138,65 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 	}
 	else if (tile == BlockTypeGlass)
 	{
-		int3 prevVoxel = convert_int3(*hit - sign(ray) * 0.0001f);
+		int3 prevVoxel = convert_int3(*hit - sign(ray) * Epsilon);
 		uchar prev = blocks[(prevVoxel.y * levelSize + prevVoxel.z) * levelSize + prevVoxel.x];
 		if (prev == BlockTypeGlass) { return false; }
 		*normal = BoxNormal(*hit, base, base + 1.0f);
 	}
 	else if (HasCrossPlaneCollision(tile))
 	{
-		*normal = BoxNormal(*hit, base, base + 1.0f);
-		float3 oldHit = *hit;
-		RayPlaneIntersection(ray, *hit, (float3){ 1.0f, 0.0f, 0.0f }, base + (float3){ 1.0f, 0.0f, 0.0f }, hit);
-		if (distance(*hit, origin) > distance(hitExit, origin) || distance(*hit, origin) < distance(oldHit, origin)) { return false; }
+		float p1Dist;
+		float3 p1Hit, p1Normal;
+		float4 p1Color;
+		bool p1Intersect = true;
+		RayPlaneIntersection(ray, *hit, normalize((float3){ 1.0f, 0.0f, 1.0f }), base + 0.5f, &p1Dist);
+		if (p1Dist < 0.0f || p1Dist > distance(*hit, *hitExit) || distance((*hit + ray * p1Dist).xz, base.xz + 0.5f) > 0.5f) { p1Intersect = false; }
+		if (p1Intersect)
+		{
+			p1Normal = (float3){ 1.0f, 0.0f, 1.0f } * (1.0f - hit->z + base.z > hit->x - base.x ? -1.0f : 1.0f);
+			p1Hit = *hit + ray * p1Dist;
+			float2 uv = { distance(base.xz + (float2){ 0.1464466f, 1.0f - 0.1464466f }, p1Hit.xz), 1.0f - (p1Hit.y - base.y) };
+			int id = GetTextureID(tile, 0);
+			uv = uv / 16.0f + (float2){ (float)((id % 16) << 4), (float)((id / 16) << 4) } / 256.0f;
+			p1Color = read_imagef(terrain, TerrainSampler, uv);
+			if (p1Color.w == 0.0f) { p1Intersect = false; }
+		}
+		
+		float p2Dist;
+		float3 p2Hit, p2Normal;
+		float4 p2Color;
+		bool p2Intersect = true;
+		RayPlaneIntersection(ray, *hit, normalize((float3){ 1.0f, 0.0f, -1.0f }), base + 0.5f, &p2Dist);
+		if (p2Dist < 0.0f || p2Dist > distance(*hit, *hitExit) || distance((*hit + ray * p2Dist).xz, base.xz + 0.5f) > 0.5f) { p2Intersect = false; }
+		if (p2Intersect)
+		{
+			p2Normal = (float3){ 1.0f, 0.0f, -1.0f } * (hit->z - base.z > hit->x - base.x ? -1.0f : 1.0f);
+			p2Hit = *hit + ray * p2Dist;
+			float2 uv = { 1.0f - distance(base.xz + (float2){ 0.1464466f, 0.1464466f }, p2Hit.xz), 1.0f - (p2Hit.y - base.y) };
+			int id = GetTextureID(tile, 0);
+			uv = uv / 16.0f + (float2){ (float)((id % 16) << 4), (float)((id / 16) << 4) } / 256.0f;
+			p2Color = read_imagef(terrain, TerrainSampler, uv);
+			if (p2Color.w == 0.0f) { p2Intersect = false; }
+		}
+		
+		if (!p1Intersect && !p2Intersect) { return false; }
+		else if ((p1Intersect && !p2Intersect) || (p1Intersect && p2Intersect && p1Dist < p2Dist))
+		{
+			*normal = p1Normal;
+			*hit = p1Hit + p1Normal * Epsilon;
+			*color = p1Color;
+			*hitExit = *hit + sign(ray) * Epsilon;
+			return true;
+		}
+		else if ((!p1Intersect && p2Intersect) || (p1Intersect && p2Intersect && p2Dist < p1Dist))
+		{
+			*normal = p2Normal;
+			*hit = p2Hit + p2Normal * Epsilon;
+			*color = p2Color;
+			*hitExit = *hit + sign(ray) * Epsilon;
+			return true;
+		}
+		return false;
 	}
 	else
 	{
@@ -159,12 +206,12 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 	float2 uv = (float2){ 0.0f, 0.0f };
 	float3 n = *hit - base;
 	int side = 0;
-	if (n.x == 0.0f) { uv = (float2){ n.z, 1.0f - n.y }; side = 5; }
-	if (n.x == dim.x) { uv = (float2){ 1.0f - n.z, 1.0 - n.y }; side = 4; }
-	if (n.y == 0.0f) { uv = n.xz; side = 0; }
-	if (n.y == dim.y) { uv = n.xz; side = 1; }
-	if (n.z == 0.0f) { uv = (float2){ 1.0f - n.x, 1.0f - n.y }; side = 3; }
-	if (n.z == dim.z) { uv = (float2){ n.x, 1.0f - n.y }; side = 2; }
+	if (fabs(n.x) < Epsilon) { uv = (float2){ n.z, 1.0f - n.y }; side = 5; }
+	if (fabs(n.x - dim.x) < Epsilon) { uv = (float2){ 1.0f - n.z, 1.0 - n.y }; side = 4; }
+	if (fabs(n.y) < Epsilon) { uv = n.xz; side = 0; }
+	if (fabs(n.y - dim.y) < Epsilon) { uv = n.xz; side = 1; }
+	if (fabs(n.z) < Epsilon) { uv = (float2){ 1.0f - n.x, 1.0f - n.y }; side = 3; }
+	if (fabs(n.z - dim.z) < Epsilon) { uv = (float2){ n.x, 1.0f - n.y }; side = 2; }
 	int id = GetTextureID(tile, side);
 	if (id == -1) { *color = (float4){ 1.0f, 0.0f, 1.0f, 1.0f }; return true; }
 	if (id == -2) { return false; }
@@ -180,14 +227,14 @@ bool RayWorldIntersection(__global uchar * blocks, __read_only image2d_t terrain
 	*hitExit = origin;
 	while (PointInBounds(*voxel, levelSize))
 	{
+		*tile = blocks[(voxel->y * levelSize + voxel->z) * levelSize + voxel->x];
 		float enter, exit;
 		RayBox(ray, origin, floor(*hitExit), floor(*hitExit) + 1.0f, &enter, &exit);
-		*hit = origin + ray * enter;
-		*hitExit = origin + ray * exit + sign(ray) * 0.0001f;
+		*hit = origin + ray * (HasCrossPlaneCollision(*tile) ? fmax(enter, 0.0f) : enter);
+		*hitExit = origin + ray * exit + sign(ray) * Epsilon;
 		
-		*tile = blocks[(voxel->y * levelSize + voxel->z) * levelSize + voxel->x];
-		if (RayBlockIntersection(blocks, terrain, ray, origin, levelSize, ignoreWater, time, *voxel, *tile, *hitExit, hit, normal, color)) { return true; }
-		*voxel = convert_int3(*hitExit);
+		if (RayBlockIntersection(blocks, terrain, ray, origin, levelSize, ignoreWater, time, *voxel, *tile, hit, hitExit, normal, color)) { return true; }
+		*voxel = convert_int3(floor(*hitExit));
 	}
 	return false;
 }
@@ -196,28 +243,26 @@ bool RaySceneIntersection(__global uchar * blocks, __read_only image2d_t terrain
 {
 	if (!RayWorldIntersection(blocks, terrain, ray, origin, levelSize, ignoreWater, time, voxel, hit, hitExit, tile, normal, color))
 	{
-		if (RayPlaneIntersection(ray, origin, (float3){ 0.0f, 1.0f, 0.0f }, (float3){ 0.0f, 64.0f, 0.0f }, hit))
+		float dist;
+		if (!ignoreWater && RayPlaneIntersection(ray, *hitExit, (float3){ 0.0f, 1.0f, 0.0f }, (float3){ 0.0f, 31.9f, 0.0f }, &dist))
 		{
-			// Raymarch clouds
-			return false;
-		}
-		else if (RayPlaneIntersection(ray, origin, (float3){ 0.0f, 1.0f, 0.0f }, (float3){ 0.0f, 31.9f, 0.0f }, hit))
-		{
-			if (!RayPlaneIntersection(ray, *hit, (float3){ 0.0f, 1.0f, 0.0f }, (float3){ 0.0f, 0.0f, 0.0f }, hitExit)) { return false; }
+			*hit = *hitExit + ray * dist;
+			*hitExit = *hit + sign(ray) * Epsilon;
 			*tile = BlockTypeWater;
 			*normal = (float3){ 0.0f, 1.0f, 0.0f };
 			*color = WaterColor(*hit, terrain);
 			return true;
 		}
-		else if (RayPlaneIntersection(ray, *hitExit, (float3){ 0.0f, 1.0f, 0.0f }, (float3){ 0.0f, 0.0f, 0.0f }, hit))
+		if (RayPlaneIntersection(ray, *hitExit, (float3){ 0.0f, 1.0f, 0.0f }, (float3){ 0.0f, 0.0f, 0.0f }, &dist))
 		{
-			*hitExit = *hit + ray * 0.0001f;
+			*hit = origin + ray * dist;
+			*hitExit = *hit + sign(ray) * Epsilon;
 			*tile = BlockTypeBedrock;
 			*normal = (float3){ 0.0f, 1.0f, 0.0f };
 			*color = (float4){ 0.0f, 0.0f, 0.0f, 1.0f };
-			return false;
+			return true;
 		}
-		else { return false; }
+		return false;
 	}
 	else { return true; }
 }
@@ -227,14 +272,13 @@ float3 TraceLighting(float3 color, float3 lightDir, float3 normal)
 	return color * ((max(dot(lightDir, normal), 0.0f) * 0.625f + 0.375f) * (float3){ 1.0f, 0.95f, 0.8f } + (float3){ 0.2f, 0.2f, 0.1f });
 }
 
-float3 TraceShadows(float3 color, float3 lightDir, __global uchar * blocks, __read_only image2d_t terrain, float3 hit, int levelSize, bool inWater, float3 waterEntry, float time)
+float3 TraceShadows(float3 color, float3 lightDir, __global uchar * blocks, __read_only image2d_t terrain, float3 hit, int levelSize, bool inWater, float3 waterEntry, float time, uchar tile)
 {
 	float4 shadowColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 	float4 hitColor = { 0.0f, 0.0f, 0.0f, 0.0f };
-	float3 exit = hit + 0.001f * lightDir;
+	float3 exit = hit + (HasCrossPlaneCollision(tile) ? 0.0f : Epsilon * lightDir);
 	float3 shadowHit, normal;
 	int3 voxel;
-	uchar tile = 0;
 	waterEntry = inWater ? waterEntry : hit;
 	while (hitColor.w < 1.0f)
 	{
@@ -270,7 +314,7 @@ float3 TraceReflections(float3 normal, __global uchar * blocks, __read_only imag
 	float4 reflectionColor = { 0.0f, 0.0f, 0.0f, 1.0f };
 	float4 hitColor = { 0.0f, 0.0f, 0.0f, 0.0f };
 	float3 rRay = normalize(ray - 2.0f * dot(ray, normal) * normal);
-	float3 exit = hit + 0.001f * rRay;
+	float3 exit = hit + Epsilon * rRay;
 	float3 rHit, rNormal;
 	int3 voxel;
 	uchar tile = 0;
@@ -286,7 +330,7 @@ float3 TraceReflections(float3 normal, __global uchar * blocks, __read_only imag
 				else { reflectionColor.w *= (1.0f - min(distance(rHit, waterEntry) / 10.0f, 1.0f)); }
 			}
 			hitColor.xyz = TraceLighting(hitColor.xyz, lightDir, rNormal);
-			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, blocks, terrain, rHit, levelSize, inWater, waterEntry, time);
+			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, blocks, terrain, rHit, levelSize, inWater, waterEntry, time, tile);
 			float4 fog = TraceFog(rHit, hit, rRay);
 			reflectionColor.xyz += fog.xyz * fog.w * reflectionColor.w;
 			reflectionColor.w *= 1.0f - fog.w;
@@ -348,10 +392,9 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 				if (tile == BlockTypeWater || tile == BlockTypeStillWater) { continue; }
 				else { fragColor.w *= (1.0f - min(distance(hit, waterEntry) / 10.0f, 1.0f)); }
 			}
-			if ((tile == BlockTypeWater || tile == BlockTypeStillWater) && normal.y > 0.0f) { hit.y += 0.1f; }
 			
 			hitColor.xyz = TraceLighting(hitColor.xyz, lightDir, normal);
-			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, blocks, terrain, hit, levelSize, inWater, waterEntry, time);
+			hitColor.xyz = TraceShadows(hitColor.xyz, lightDir, blocks, terrain, hit, levelSize, inWater, waterEntry, time, tile);
 			float4 fog = TraceFog(hit, origin, ray);
 			fragColor.xyz += fog.xyz * fog.w * fragColor.w;
 			fragColor.w *= 1.0f - fog.w;
