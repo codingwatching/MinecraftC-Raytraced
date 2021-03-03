@@ -267,15 +267,15 @@ bool RaySceneIntersection(__global uchar * blocks, __read_only image2d_t terrain
 
 float3 TraceLighting(float3 color, float3 lightDir, float3 normal, float3 ray, uchar tile)
 {
-	float ambientStrength = 0.25f;
+	float ambientStrength = 0.2f;
 	float specularStrength = 0.1f;
 	int shininess = 4;
 	float3 lightColor = { 1.0f, 1.0f, 1.0f };
 	float3 reflect = normalize(lightDir - 2.0f * dot(lightDir, normal) * normal);
 	float3 ambient = ambientStrength * lightColor;
-	float3 diffuse = (max(dot(normal, lightDir), 0.0) * lightColor * 0.25f + 0.75f);
+	float3 diffuse = (fmax(dot(normal, lightDir), -1.0f) * lightColor * 0.25f + 0.75f);
 	float3 specular = specularStrength * pow(max(dot(ray, reflect), 0.0f), shininess) * lightColor;
-	return (ambient + diffuse + specular) * color;//color * ((max(dot(lightDir, normal), -1.0f) * 0.25f + 0.75f));//* (float3){ 1.0f, 0.95f, 0.8f } + (float3){ 0.25f, 0.25f, 0.25f });
+	return (ambient + diffuse + specular) * color;
 }
 
 float3 TraceShadows(float3 color, float3 lightDir, __global uchar * blocks, __read_only image2d_t terrain, float3 hit, int levelSize, bool inWater, float3 waterEntry, float time, uchar tile)
@@ -431,6 +431,5 @@ __kernel void trace(uint treeDepth, __global uchar * octree, __global uchar * bl
 			break;
 		}
 	}
-	if (tile == 255) { fragColor.xyz = (float3){ 0.0f, 0.0f, 0.0f }; }
 	write_imagef(texture, (int2){ x, y }, (float4){ fragColor.xyz, 1.0f });
 }
