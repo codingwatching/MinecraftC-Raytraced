@@ -90,7 +90,7 @@ bool ShouldDiscardTransparency(uchar tile)
 
 float3 BGColor(float3 ray)
 {
-	float t = clamp(1.0f - pow(1.0f - ray.y, 4.0f), -1.0f, 1.0f);
+	float t = 1.0f - (1.0f - ray.y) * (1.0f - ray.y);
 	return t * (float3){ 0.63f, 0.8f, 1.0f } + (1.0f - t) * (float3){ 1.0f, 1.0f, 1.0f };
 }
 
@@ -267,13 +267,12 @@ bool RaySceneIntersection(__global uchar * blocks, __read_only image2d_t terrain
 
 float3 TraceLighting(float3 color, float3 lightDir, float3 normal, float3 ray, uchar tile)
 {
-	float ambientStrength = 0.2f;
 	float specularStrength = 0.1f;
 	int shininess = 4;
-	float3 lightColor = { 1.0f, 1.0f, 1.0f };
+	float3 lightColor = { 1.0f, 0.95f, 0.8f };
 	float3 reflect = normalize(lightDir - 2.0f * dot(lightDir, normal) * normal);
-	float3 ambient = ambientStrength * lightColor;
-	float3 diffuse = (fmax(dot(normal, lightDir), -1.0f) * lightColor * 0.25f + 0.75f);
+	float3 ambient = (float3){ 0.2f, 0.2f, 0.1f };
+	float3 diffuse = (fmax(dot(normal, lightDir), -1.0f) * 0.375f + 0.625f) * lightColor;
 	float3 specular = specularStrength * pow(max(dot(ray, reflect), 0.0f), shininess) * lightColor;
 	return (ambient + diffuse + specular) * color;
 }
@@ -311,7 +310,7 @@ float3 TraceShadows(float3 color, float3 lightDir, __global uchar * blocks, __re
 float4 TraceFog(float3 hit, float3 origin, float3 ray)
 {
 	float d = distance(hit, origin);
-	float w = d < 128.0f ? clamp(d / 128.0f, 0.0f, 0.5f) : 0.5f * clamp((d - 128.0f) / 1024.0f, 0.0f, 1.0f) + 0.5f;
+	float w = d < 128.0f ? clamp(d / 128.0f, 0.0f, 0.6f) : 0.5f * clamp((d - 128.0f) / 1024.0f, 0.0f, 1.0f) + 0.6f;
 	return (float4){ BGColor(ray), w };
 }
 
