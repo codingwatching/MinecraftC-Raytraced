@@ -105,7 +105,7 @@ bool PointInBounds(int3 v, int levelSize)
 	return v.x >= 0 && v.y >= 0 && v.z >= 0 && v.x < levelSize && v.y < 64 && v.z < levelSize;
 }
 
-bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int levelSize, bool ignoreWater, float time, int3 voxel, uchar tile, float3 * hit, float3 * hitExit, float3 * normal, float4 * color)
+bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain, float3 ray, float3 origin, int levelSize, bool ignoreWater, float time, int3 voxel, uchar tile, float3 hitExit, float3 * hit, float3 * normal, float4 * color)
 {
 	float3 base = convert_float3(voxel);
 	float3 dim = (float3){ 1.0f, 1.0f, 1.0f };
@@ -150,7 +150,7 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 		float4 p1Color;
 		bool p1Intersect = true;
 		RayPlaneIntersection(ray, *hit, normalize((float3){ 1.0f, 0.0f, 1.0f }), base + 0.5f, &p1Dist);
-		if (p1Dist < 0.0f || p1Dist > distance(*hit, *hitExit) || distance((*hit + ray * p1Dist).xz, base.xz + 0.5f) > 0.5f) { p1Intersect = false; }
+		if (p1Dist < 0.0f || p1Dist > distance(*hit, hitExit) || distance((*hit + ray * p1Dist).xz, base.xz + 0.5f) > 0.5f) { p1Intersect = false; }
 		if (p1Intersect)
 		{
 			p1Normal = (float3){ 1.0f, 0.0f, 1.0f } * (1.0f - hit->z + base.z > hit->x - base.x ? -1.0f : 1.0f);
@@ -167,7 +167,7 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 		float4 p2Color;
 		bool p2Intersect = true;
 		RayPlaneIntersection(ray, *hit, normalize((float3){ 1.0f, 0.0f, -1.0f }), base + 0.5f, &p2Dist);
-		if (p2Dist < 0.0f || p2Dist > distance(*hit, *hitExit) || distance((*hit + ray * p2Dist).xz, base.xz + 0.5f) > 0.5f) { p2Intersect = false; }
+		if (p2Dist < 0.0f || p2Dist > distance(*hit, hitExit) || distance((*hit + ray * p2Dist).xz, base.xz + 0.5f) > 0.5f) { p2Intersect = false; }
 		if (p2Intersect)
 		{
 			p2Normal = (float3){ 1.0f, 0.0f, -1.0f } * (hit->z - base.z > hit->x - base.x ? -1.0f : 1.0f);
@@ -185,7 +185,6 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 			*normal = p1Normal;
 			*hit = p1Hit + p1Normal * Epsilon;
 			*color = p1Color;
-			*hitExit = *hit + sign(ray) * Epsilon;
 			return true;
 		}
 		else if ((!p1Intersect && p2Intersect) || (p1Intersect && p2Intersect && p2Dist < p1Dist))
@@ -193,7 +192,6 @@ bool RayBlockIntersection(__global uchar * blocks, __read_only image2d_t terrain
 			*normal = p2Normal;
 			*hit = p2Hit + p2Normal * Epsilon;
 			*color = p2Color;
-			*hitExit = *hit + sign(ray) * Epsilon;
 			return true;
 		}
 		return false;
@@ -233,7 +231,7 @@ bool RayWorldIntersection(__global uchar * blocks, __read_only image2d_t terrain
 		*hit = origin + ray * (HasCrossPlaneCollision(*tile) ? fmax(enter, 0.0f) : enter);
 		*hitExit = origin + ray * exit + sign(ray) * Epsilon;
 		
-		if (RayBlockIntersection(blocks, terrain, ray, origin, levelSize, ignoreWater, time, *voxel, *tile, hit, hitExit, normal, color)) { return true; }
+		if (RayBlockIntersection(blocks, terrain, ray, origin, levelSize, ignoreWater, time, *voxel, *tile, *hitExit, hit, normal, color)) { return true; }
 		*voxel = convert_int3(floor(*hitExit));
 	}
 	return false;
