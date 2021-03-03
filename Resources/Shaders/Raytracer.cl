@@ -267,7 +267,7 @@ bool RaySceneIntersection(__global uchar * blocks, __read_only image2d_t terrain
 
 float3 TraceLighting(float3 color, float3 lightDir, float3 normal)
 {
-	return color * ((max(dot(lightDir, normal), 0.0f) * 0.625f + 0.375f) * (float3){ 1.0f, 0.95f, 0.8f } + (float3){ 0.2f, 0.2f, 0.1f });
+	return color * ((max(dot(lightDir, normal), 0.0f) * 0.5f + 0.5f) * (float3){ 1.0f, 0.95f, 0.8f } + (float3){ 0.2f, 0.2f, 0.1f });
 }
 
 float3 TraceShadows(float3 color, float3 lightDir, __global uchar * blocks, __read_only image2d_t terrain, float3 hit, int levelSize, bool inWater, float3 waterEntry, float time, uchar tile)
