@@ -1,4 +1,3 @@
 # MinecraftC-Raytraced
-An implementation of Minecraft 0.0.30a in C, but *raytraced*
-
+In a WIP state, for more information, join our discord server:
 https://discord.gg/2BVnXdU5rB
